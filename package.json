@@ -1,0 +1,38 @@
+{
+	"name": "pg-queue",
+	"version": "0.0.1",
+	"author": {
+		"email": "marek@dayone.pl",
+		"name": "Marek Piechut",
+		"url": "https://marekpiechut.github.io"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">= 18"
+	},
+	"description": "Full feature queue and schedule jobs solution for NodeJS",
+	"main": "./lib/index.js",
+	"types": "./lib/index.d.ts",
+	"devDependencies": {
+		"@types/node": "^18.17.14",
+		"@typescript-eslint/eslint-plugin": "^6.6.0",
+		"@typescript-eslint/parser": "^6.6.0",
+		"eslint-config-prettier": "^9.0.0",
+		"eslint-plugin-prettier": "^5.0.0",
+		"husky": "^8.0.3",
+		"prettier": "^3.0.3",
+		"tsx": "^3.12.8",
+		"typescript": "^5.2.2"
+	},
+	"private": true,
+	"scripts": {
+		"build": "tsc -b",
+		"test": "tsx --test test/**",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint --ext .ts src/** test/**",
+		"lint:commit": "eslint --ext .ts --max-warnings 0 src/** test/**",
+		"validate": "npm run lint && npm run typecheck && npm run test",
+		"validate:commit": "npm run lint:commit && npm run typecheck && npm run test",
+		"prepare": "husky install"
+	}
+}

@@ -1,0 +1,42 @@
+{
+	"env": {
+		"es2021": true
+	},
+	"parser": "@typescript-eslint/parser",
+	"extends": [
+		"prettier",
+		"plugin:@typescript-eslint/recommended"
+	],
+	"plugins": ["@typescript-eslint", "prettier"],
+	"rules": {
+		"import/extensions": "off",
+		"no-use-before-define": "off",
+		"no-else-return": "off",
+		"no-nested-ternary": "off",
+		"no-shadow": "off",
+		"@typescript-eslint/no-shadow": "off",
+		"@typescript-eslint/no-extra-semi": "off",
+		"@typescript-eslint/no-use-before-define": "off",
+		"@typescript-eslint/no-explicit-any": "error",
+		"@typescript-eslint/no-inferrable-types": "off",
+		"@typescript-eslint/explicit-function-return-type": "error",
+		"@typescript-eslint/no-unused-vars": [
+			"warn",
+			{ "varsIgnorePattern": "_.*" }
+		],
+		"prefer-promise-reject-errors": "off",
+		"prettier/prettier": ["error"]
+	},
+	"overrides": [
+		{
+			"files": ["src/**/*.test.js", "test/**"],
+			"globals": {
+				"afterEach": false,
+				"beforeEach": false,
+				"describe": false,
+				"expect": false,
+				"it": false
+			}
+		}
+	]
+}
