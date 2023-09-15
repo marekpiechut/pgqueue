@@ -1,12 +1,9 @@
 {
 	"env": {
-		"es2021": true
+		"es2020": true
 	},
 	"parser": "@typescript-eslint/parser",
-	"extends": [
-		"prettier",
-		"plugin:@typescript-eslint/recommended"
-	],
+	"extends": ["prettier", "plugin:@typescript-eslint/recommended"],
 	"plugins": ["@typescript-eslint", "prettier"],
 	"rules": {
 		"import/extensions": "off",
@@ -29,14 +26,9 @@
 	},
 	"overrides": [
 		{
-			"files": ["src/**/*.test.js", "test/**"],
-			"globals": {
-				"afterEach": false,
-				"beforeEach": false,
-				"describe": false,
-				"expect": false,
-				"it": false
-			}
+			"files": ["**/*.mjs"],
+			"plugins": ["prettier"],
+			"extends": ["prettier"]
 		}
 	]
 }

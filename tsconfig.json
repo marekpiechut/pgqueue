@@ -4,7 +4,7 @@
 		"lib": ["ES2020"],
 		"module": "ES2020",
 		"moduleResolution": "node",
-		"baseUrl": "src",
+		"baseUrl": "./src",
 		"sourceRoot": "src",
 		"types": [],
 		"declaration": true,
@@ -27,7 +27,10 @@
 		"noUnusedParameters": true,
 
 		"noFallthroughCasesInSwitch": true,
-		"skipLibCheck": true
+		"skipLibCheck": true,
+		"paths": {
+			"~/*": ["./*"]
+		}
 	},
-	"include": ["src"]
+	"include": ["src", "test"]
 }
