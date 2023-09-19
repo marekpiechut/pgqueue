@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 import { assert } from '~/utils/chai.test'
 
 import pg from 'pg'
-import broadcaster from './broadcaster'
 import { waitFor } from '~/utils/utils.test'
+import * as broadcaster from './broadcaster'
 
 describe('broadcaster', async () => {
 	describe('start/stop', () => {
@@ -21,40 +21,22 @@ describe('broadcaster', async () => {
 			return await events.start()
 		})
 
-		it('can be started with config', async () => {
-			mock.method(pg.Client.prototype, 'on', () => {})
-			const clientConstructorMock = mock.method(pg, 'Client', function () {
-				const client = new pgConstructor({})
-				mock.method(client, 'connect', () => Promise.resolve())
-				mock.method(client, 'on', () => Promise.resolve())
-				return client
-			})
-			const events = broadcaster.fromConfig({ user: 'zigi' })
-			await events.start()
-
-			assert.equal(clientConstructorMock.mock.calls.length, 1)
-			assert.propertyVal(
-				clientConstructorMock.mock.calls[0].arguments[0],
-				'user',
-				'zigi'
-			)
-		})
-
 		it('can be started with client factory', async () => {
-			const factory = mock.fn(() => mockClient().client)
-			const events = broadcaster.fromClientFactory(factory)
+			const acquire = mock.fn(() => Promise.resolve(mockClient().client))
+			const release = mock.fn(() => Promise.resolve())
+			const events = await broadcaster.fromFactory({ acquire, release })
 			await events.start()
-			assert.equal(factory.mock.calls.length, 1)
+			assert.equal(acquire.mock.calls.length, 1)
 		})
 
-		it('opens connection on start', async () => {
+		it('does not open connection on start', async () => {
 			const { client, mocks } = mockClient()
 			const events = broadcaster.fromClient(client)
 			await events.start()
-			assert.equal(mocks.connect.mock.calls.length, 1)
+			assert.equal(mocks.connect.mock.calls.length, 0)
 		})
 
-		it('closes client on shutdown', async () => {
+		it('does not end client on shutdown', async () => {
 			const { client } = mockClient()
 			const endMock = mock.method(client, 'end', () => Promise.resolve())
 			mock.method(client, 'query', () => Promise.resolve({}))
@@ -64,7 +46,7 @@ describe('broadcaster', async () => {
 			await events.start()
 			await events.shutdown()
 
-			assert.equal(endMock.mock.calls.length, 1)
+			assert.equal(endMock.mock.calls.length, 0)
 		})
 
 		it('fails shutdown if UNLISTEN failed', async () => {
@@ -76,19 +58,6 @@ describe('broadcaster', async () => {
 
 			const events = broadcaster.fromClient(client)
 			await events.start()
-			assert.isRejected(events.shutdown())
-		})
-
-		it('fails shutdown if client.end failed', async () => {
-			const { client } = mockClient()
-			mock.method(client, 'end', () =>
-				Promise.reject(new Error('client.end failed'))
-			)
-			mock.method(client, 'query', () => Promise.resolve({}))
-
-			const events = broadcaster.fromClient(client)
-			await events.start()
-
 			assert.isRejected(events.shutdown())
 		})
 
@@ -327,12 +296,14 @@ describe('broadcaster', async () => {
 			const clients = [mockClient(), mockClient()]
 			let clientIndex = 0
 
-			const clientFactory = mock.fn(() => {
-				return clients[clientIndex++].client
+			const acquire = mock.fn(() => {
+				return Promise.resolve(clients[clientIndex++].client)
 			})
-			const events = broadcaster.fromClientFactory(clientFactory, {
-				reconnectDelay: { type: 'constant', delay: 0 },
-			})
+			const release = mock.fn((_: pg.Client) => Promise.resolve())
+			const events = await broadcaster.fromFactory(
+				{ acquire, release },
+				{ reconnectDelay: { type: 'constant', delay: 0 } }
+			)
 			events.on('test', () => {})
 			await events.start()
 
@@ -342,14 +313,14 @@ describe('broadcaster', async () => {
 
 			onError?.('Dummy error')
 
-			await waitFor(() => clients[0].mocks.end.mock.calls.length, 1)
-			await waitFor(() => clients[1].mocks.connect.mock.calls.length, 1)
+			await waitFor(() => acquire.mock.callCount(), 2, {
+				label: 'Expected acquire called twice',
+			})
 			await waitFor(
-				() => clients[1].mocks.query.mock.calls,
-				value => {
-					return !!value.find(
-						c => c?.arguments?.[0]?.toString().match(/LISTEN\s+"?.*test"?/i)
-					)
+				() => release.mock.calls[0].arguments[0],
+				clients[0].client,
+				{
+					label: 'Expected release called with first client',
 				}
 			)
 		})

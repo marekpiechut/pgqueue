@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-import { program } from 'commander'
-import broadcaster from '../lib/broadcast/broadcaster.js'
 import chalk from 'chalk'
+import { program } from 'commander'
+import pg from 'pg'
+import broadcaster from '../lib/broadcast/broadcaster.js'
 
 const parsePayload = data => {
 	if (data.length === 1 && data[0].trim().startsWith('{')) {
@@ -27,13 +28,15 @@ program
 	.description('Start listening to a channel')
 	.action(async channel => {
 		const opts = program.opts()
-		const events = broadcaster.fromConfig({
-			port: opts.port,
-			host: opts.host,
-			user: opts.user,
-			password: opts.pass,
-			database: opts.db,
-		})
+		const events = await broadcaster.fromPool(
+			new pg.Pool({
+				port: opts.port,
+				host: opts.host,
+				user: opts.user,
+				password: opts.pass,
+				database: opts.db,
+			})
+		)
 		let last = new Date(0)
 		events.on(channel, payload => {
 			if (last.getTime() < payload.created.getTime() - 1000 * 30) {
@@ -51,16 +54,23 @@ program
 	.action(async (channel, data) => {
 		const payload = parsePayload(data)
 		const opts = program.opts()
-		const events = broadcaster.fromConfig({
+		const client = new pg.Client({
 			port: opts.port,
 			host: opts.host,
 			user: opts.user,
 			password: opts.pass,
 			database: opts.db,
 		})
-		events.start()
-		await events.emit(channel, payload)
-		await events.shutdown()
+
+		await client.connect()
+		try {
+			const events = await broadcaster.fromClient(client)
+			await events.start()
+			await events.emit(channel, payload)
+			await events.shutdown()
+		} finally {
+			await client.end()
+		}
 	})
 
 program.parse(process.argv)

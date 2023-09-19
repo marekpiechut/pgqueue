@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { KEY_BASE, RetryDelay } from '~/models'
+import { ClientFactory, KEY_BASE, RetryDelay } from '~/models'
 import { logger } from '~/utils/logger'
 import { nextRun } from '~/utils/retry'
 
@@ -120,16 +120,17 @@ export type BroadcasterConfig = {
  * You need to handle them yourself and re-create the broadcaster.
  * Check Client.on('error') event to register error handler.
  *
- * It's usually better to use {@link fromConfig} instead.
+ * It's usually better to use {@link fromPool} instead.
  * As it will handle all errors and reconnect when needed.
  *
  * PG client **must not** be from the pool and should not be reused for other purposes
  * as crashing the connection might break the broadcaster.
- * Best is to just create a new Client, pass it here and forget about it.
+ * Best is to just create a new Client, connect it, pass here and forget about it until you need to shut down.
+ * Remember, that **you are responsible for closing the client** after shutdown.
  *
  * Make sure you **register all listeners before calling `start`** method or you might miss some events.
  *
- * @param client PG client **must not** be from the pool
+ * @param client PG client **must not** be from the pool, and has to be connected. You are responsible for closing it after shutdown.
  */
 export const fromClient = (
 	client: pg.Client,
@@ -176,7 +177,6 @@ export const fromClient = (
 				})
 			})
 
-			await client.connect()
 			for (const type in listeners) {
 				log.debug('Listening for events:', type)
 				await client.query(
@@ -217,49 +217,41 @@ export const fromClient = (
 				delete listeners[type]
 			}
 			await client.query('UNLISTEN *')
-			await client.end()
 			log.info('Broadcaster shutdown complete')
 		},
 	}
 }
+
 /**
- * Create new broadcaster. Usually you want to create only one
+ * **This is the preferred way to create broadcaster in production apps**
+ *
+ * Creates new broadcaster. Usually you want to create only one
  * per application and share it across all modules.
  *
- * **This is the recommended way to create broadcaster.**
  * Broadcaster created with this method will handle all errors
  * and reconnect when needed.
  *
- * Make sure you **register all listeners before calling `start`** method or you might miss some events.
+ * Keep in mind that creating a new broadcaster will permanenly occupy
+ * one of pool connections.
  *
- * @param config Config passed to PG client constructor with addtional callbacks
+ * Make sure you **register all listeners before calling `start`** method or you might miss some events.
  */
-export const fromConfig = (
-	config: pg.ClientConfig & BroadcasterConfig
-): Broadcaster => {
-	const createClient = clientFactory(config)
-	return fromClientFactory(createClient, config)
+export const fromPool = async (
+	pool: pg.Pool,
+	config?: BroadcasterConfig
+): Promise<Broadcaster> => {
+	return fromFactory(poolConnectionFactory(pool), config)
 }
 
-/**
- * Create new broadcaster. Usually you want to create only one
- * per application and share it across all modules.
- *
- * Broadcaster created with this method will handle all errors
- * and reconnect when needed. This method is just a helper, you usually
- * should use {@link fromConfig} instead.
- *
- * Make sure you **register all listeners before calling `start`** method or you might miss some events.
- */
-export const fromClientFactory = (
-	createClient: () => pg.Client,
+export const fromFactory = async (
+	factory: ClientFactory,
 	config?: BroadcasterConfig
-): Broadcaster => {
+): Promise<Broadcaster> => {
 	const retryDelay = config?.reconnectDelay ?? { type: 'constant', delay: 1000 }
 
 	let attempt = 0
-	const reconnect = (): void => {
-		client = createClient()
+	const reconnect = async (): Promise<void> => {
+		client = await factory.acquire()
 		client.on('error', handleError)
 
 		instance.setClient(client)
@@ -275,23 +267,33 @@ export const fromClientFactory = (
 			})
 	}
 	const handleError = async (e: Error): Promise<void> => {
-		log.error('Client error, restarting connection', e)
+		log.error(e, 'Client error, restarting connection')
 		try {
 			config?.onClientError?.(e)
 		} catch (e) {
-			log.error('Error in onClientError handler', e)
+			log.error(e, 'Error in onClientError handler')
 		}
 
-		if (client) client.end().catch(log.error)
+		if (client) factory.release(client).catch(log.error)
 		const waitTime = nextRun(retryDelay, attempt++, MAX_RESTART_DELAY)
 		setTimeout(reconnect, waitTime)
 	}
 
-	let client: pg.Client = createClient()
+	let client: pg.Client = await factory.acquire()
 	const instance = fromClient(client, config)
 	client.on('error', handleError)
 
-	return instance
+	return {
+		...instance,
+		shutdown: async (): Promise<void> => {
+			try {
+				await instance.shutdown()
+			} finally {
+				log.debug("Releasing broadcaster's client")
+				await factory.release(client)
+			}
+		},
+	}
 }
 
 const emit = async <P>(
@@ -310,13 +312,16 @@ const emit = async <P>(
 	)
 }
 
-const clientFactory =
-	(config: pg.ClientConfig): (() => pg.Client) =>
-	() =>
-		new pg.Client(config)
+const poolConnectionFactory = (pool: pg.Pool): ClientFactory => ({
+	acquire: async (): Promise<pg.Client> => {
+		return pool.connect()
+	},
+	release: async (client: pg.Client): Promise<void> => {
+		await client.release()
+	},
+})
 
 export default {
 	fromClient,
-	fromConfig,
-	fromClientFactory,
+	fromPool,
 }

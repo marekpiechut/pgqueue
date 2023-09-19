@@ -1,0 +1,29 @@
+{
+	"name": "@pgqueue/sample-chat-ws",
+	"version": "1.0.0",
+	"description": "Sample chat application using WS and PGQueue broadcaster to support clustering",
+	"main": "server.ts",
+	"author": {
+		"email": "marek@dayone.pl",
+		"name": "Marek Piechut",
+		"url": "https://marekpiechut.github.io"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">= 18"
+	},
+	"scripts": {
+		"start": "tsx --watch server.ts"
+	},
+	"devDependencies": {
+		"@types/pg": "^8.10.2",
+		"@types/ws": "^8.5.5",
+		"tsx": "^3.12.10"
+	},
+	"dependencies": {
+		"@pgqueue/pgqueue": "../../lib",
+		"pg": "^8.11.3",
+		"uuid": "^9.0.1",
+		"ws": "^8.14.1"
+	}
+}

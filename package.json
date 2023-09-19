@@ -1,5 +1,5 @@
 {
-	"name": "pg-queue",
+	"name": "@pgqueue/pgqueue",
 	"version": "0.0.1",
 	"author": {
 		"email": "marek@dayone.pl",
@@ -20,6 +20,7 @@
 		"@types/chai-string": "^1.4.3",
 		"@types/node": "^18.17.14",
 		"@types/pg": "7.4.0",
+		"@types/ws": "^8.5.5",
 		"@typescript-eslint/eslint-plugin": "^6.6.0",
 		"@typescript-eslint/parser": "^6.6.0",
 		"chai": "^4.3.8",

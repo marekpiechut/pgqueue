@@ -1,10 +1,9 @@
-import { fromClient, fromConfig, fromClientFactory } from './broadcaster'
+import { fromClient, fromPool } from './broadcaster'
 export type { Broadcaster, Event } from './broadcaster'
 
-export { fromClient, fromConfig, fromClientFactory }
+export { fromClient, fromPool }
 
 export default {
 	fromClient,
-	fromConfig,
-	fromClientFactory,
+	fromPool,
 }

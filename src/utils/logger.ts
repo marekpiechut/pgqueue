@@ -7,14 +7,19 @@ const LEVELS = {
 	error: 10,
 	none: -1,
 }
-const level =
-	LEVELS[process.env.PGQUEUE_LOG_LEVEL as keyof typeof LEVELS] ?? LEVELS.info
+let level = LEVELS.info
+
+export const setLevel = (newLevel: LogLevel | null | undefined): void => {
+	level = (newLevel && LEVELS[newLevel]) || LEVELS.info
+}
+
+export type LogLevel = keyof typeof LEVELS
 
 export type Logger = {
 	debug: (message: string, ...args: unknown[]) => void
 	info: (message: string, ...args: unknown[]) => void
 	warn: (message: string, ...args: unknown[]) => void
-	error: (message: string, ...args: unknown[]) => void
+	error: (error: unknown | null, message?: string, ...args: unknown[]) => void
 }
 export const logger = (name: string): Logger => {
 	return {
@@ -33,9 +38,13 @@ export const logger = (name: string): Logger => {
 				console.warn(`[${name}] ${message}`, ...args)
 			}
 		},
-		error: (message: string, ...args: unknown[]): void => {
+		error: (
+			error: unknown | null,
+			message?: string,
+			...args: unknown[]
+		): void => {
 			if (level >= LEVELS.error) {
-				console.error(`[${name}] ${message}`, ...args)
+				console.error(`[${name}] ${message}`, error, ...args)
 			}
 		},
 	}
