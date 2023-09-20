@@ -1,0 +1,39 @@
+{
+	"name": "@pgqueue/broadcast",
+	"version": "1.0.0",
+	"description": "Broadcast events between NodeJS cluster nodes using PostgreSQL.",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib"
+	],
+	"repository": "https://github.com/marekpiechut/pgqueue/packages/broadcast",
+	"author": {
+		"email": "marek@dayone.pl",
+		"name": "Marek Piechut",
+		"url": "https://marekpiechut.github.io"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">= 18"
+	},
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "tsc",
+		"clean": "shx rm -rf ./lib",
+		"test": "mocha --require tsx --require @pgqueue/test-utils src/**/*.test.ts",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint --ext .ts --max-warnings 0 src/**",
+		"validate": "yarn lint && yarn typecheck && yarn test"
+	},
+	"peerDependencies": {
+		"pg": ">=7.4.0"
+	},
+	"dependencies": {
+		"@pgqueue/core": "^1.0.0"
+	},
+	"devDependencies": {
+		"@pgqueue/test-utils": "^1.0.0"
+	}
+}

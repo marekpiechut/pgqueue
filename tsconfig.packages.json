@@ -1,0 +1,36 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"lib": ["ES2020"],
+		"module": "ES2020",
+		"types": ["node"],
+		"moduleResolution": "node",
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+		"removeComments": true,
+		"isolatedModules": true,
+		"allowSyntheticDefaultImports": true,
+		"forceConsistentCasingInFileNames": true,
+
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"strictFunctionTypes": true,
+		"strictBindCallApply": true,
+		"strictPropertyInitialization": true,
+		"noImplicitThis": true,
+		"alwaysStrict": true,
+		"noUnusedParameters": true,
+
+		"noFallthroughCasesInSwitch": true,
+		"skipLibCheck": true
+	},
+	"exclude": [
+		"node_modules",
+		"**/*.test.ts",
+		"**/*.mock.ts",
+		"**/*.it.ts",
+		"**/*.spec.ts"
+	]
+}

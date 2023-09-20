@@ -1,0 +1,33 @@
+{
+	"name": "@pgqueue/cli",
+	"version": "1.0.0",
+	"description": "CLI utilities for PGQueue",
+	"bin": {
+		"pgqueue": "./lib/index.js"
+	},
+	"types": "lib/index",
+	"repository": "https://github.com/marekpiechut/pgqueue/packages/test-utils",
+	"author": {
+		"email": "marek@dayone.pl",
+		"name": "Marek Piechut",
+		"url": "https://marekpiechut.github.io"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">= 18"
+	},
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "tsc -p ./tsconfig.json",
+		"clean": "shx rm -rf ./lib",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint --ext .ts --max-warnings 0 src/**",
+		"validate": "yarn lint && yarn typecheck"
+	},
+	"dependencies": {
+		"@pgqueue/broadcast": "^1.0.0",
+		"commander": "^11.0.0",
+		"pg": "^8.11.3"
+	}
+}

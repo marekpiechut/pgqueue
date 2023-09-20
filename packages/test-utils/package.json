@@ -1,0 +1,45 @@
+{
+	"name": "@pgqueue/test-utils",
+	"version": "1.0.0",
+	"description": "Just some test utilities for pgqueue. Grab them if you want, but no support is provided.",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib"
+	],
+	"repository": "https://github.com/marekpiechut/pgqueue/packages/test-utils",
+	"author": {
+		"email": "marek@dayone.pl",
+		"name": "Marek Piechut",
+		"url": "https://marekpiechut.github.io"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">= 18"
+	},
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"build": "tsc",
+		"clean": "shx rm -rf ./lib",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint --ext .ts --max-warnings 0 src/**",
+		"validate": "yarn lint && yarn typecheck"
+	},
+	"dependencies": {
+		"chai": "^4.3.8",
+		"chai-as-promised": "^7.1.1",
+		"chai-string": "^1.5.0",
+		"sinon": "^16.0.0",
+		"testdouble": "^3.19.0",
+		"mocha": "^10.2.0",
+		"@pgqueue/core": "^1.0.0"
+	},
+	"devDependencies": {
+		"@types/chai": "^4.3.6",
+		"@types/chai-as-promised": "^7.1.6",
+		"@types/chai-string": "^1.4.3",
+		"@types/mocha": "^10.0.1",
+		"@types/sinon": "^10.0.16"
+	}
+}

@@ -1,0 +1,36 @@
+{
+	"name": "@pgqueue/quickstart",
+	"version": "1.0.0",
+	"description": "Setup your PGQueue queue/eventbus/scheduled jobs in seconds",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
+	"files": [
+		"lib"
+	],
+	"repository": "https://github.com/marekpiechut/pgqueue/packages/quickstart",
+	"author": {
+		"email": "marek@dayone.pl",
+		"name": "Marek Piechut",
+		"url": "https://marekpiechut.github.io"
+	},
+	"license": "MIT",
+	"engines": {
+		"node": ">= 18"
+	},
+	"scripts": {
+		"build": "tsc -p ./tsconfig.json",
+		"clean": "shx rm -rf ./lib",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint --ext .ts --max-warnings 0 src/**",
+		"validate": "yarn lint && yarn typecheck"
+	},
+	"type": "module",
+	"private": true,
+	"devDependencies": {
+		"@types/pg": "^8.10.2"
+	},
+	"dependencies": {
+		"@pgqueue/core": "^1.0.0",
+		"@pgqueue/broadcast": "^1.0.0"
+	}
+}

@@ -1,6 +1,9 @@
 {
-	"name": "@pgqueue/pgqueue",
-	"version": "0.0.1",
+	"name": "@pgqueue/root",
+	"version": "1.0.0",
+	"workspaces": [
+		"packages/*"
+	],
 	"author": {
 		"email": "marek@dayone.pl",
 		"name": "Marek Piechut",
@@ -10,48 +13,29 @@
 	"engines": {
 		"node": ">= 18"
 	},
-	"type": "module",
 	"description": "Full feature queue and schedule jobs solution for NodeJS",
-	"main": "./lib/index.js",
-	"types": "./lib/index.d.ts",
+	"private": true,
+	"scripts": {
+		"build": "lerna run build",
+		"clean": "lerna run clean",
+		"validate": "lerna run validate",
+		"test": "lerna run test",
+		"it": "tsx --test --experimental-test-coverage test/**",
+		"prepare": "husky install"
+	},
 	"devDependencies": {
-		"@types/chai": "^4.3.6",
-		"@types/chai-as-promised": "^7.1.6",
-		"@types/chai-string": "^1.4.3",
-		"@types/node": "^18.17.14",
-		"@types/pg": "7.4.0",
-		"@types/ws": "^8.5.5",
-		"@typescript-eslint/eslint-plugin": "^6.6.0",
-		"@typescript-eslint/parser": "^6.6.0",
-		"chai": "^4.3.8",
-		"chai-as-promised": "^7.1.1",
-		"chai-string": "^1.5.0",
-		"chalk": "^5.3.0",
-		"commander": "^11.0.0",
+		"@types/node": "^20.6.2",
+		"@typescript-eslint/eslint-plugin": "^6.7.2",
+		"@typescript-eslint/parser": "^6.7.2",
+		"eslint": "^8.49.0",
 		"eslint-config-prettier": "^9.0.0",
 		"eslint-plugin-prettier": "^5.0.0",
 		"husky": "^8.0.3",
+		"lerna": "^7.3.0",
 		"prettier": "^3.0.3",
-		"tsx": "^3.12.8",
+		"shx": "^0.3.4",
+		"ts-jest": "^29.1.1",
+		"tsx": "^3.12.10",
 		"typescript": "^5.2.2"
-	},
-	"private": true,
-	"scripts": {
-		"build": "tsc -p tsconfig.build.json",
-		"clean": "rm -rf lib",
-		"test": "PGQUEUE_LOG_LEVEL=none tsx --test src/**/*.test.*",
-		"test:watch": "PGQUEUE_LOG_LEVEL=none tsx --test --watch src/**/*.test.*",
-		"test:cov": "PGQUEUE_LOG_LEVEL=none tsx --test --experimental-test-coverage src/**/*.test.*",
-		"it": "tsx --test test/**",
-		"it:cov": "tsx --test --experimental-test-coverage test/**",
-		"typecheck": "tsc --noEmit",
-		"lint": "eslint --ext .ts src/** test/**",
-		"lint:commit": "eslint --ext .ts --max-warnings 0 src/** test/**",
-		"validate": "npm run lint && npm run typecheck && npm run test",
-		"validate:commit": "npm run lint:commit && npm run typecheck && npm run test",
-		"prepare": "husky install"
-	},
-	"peerDependencies": {
-		"pg": ">=7.4.0"
 	}
 }
