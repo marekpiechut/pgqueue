@@ -5,8 +5,8 @@ export default (config: Config): EvolutionExpression[] => [
 		version INTEGER NOT NULL,
 		checksum VARCHAR(64),
 		applied TIMESTAMP NOT NULL DEFAULT NOW(),
-		ups TEXT,
-		downs TEXT,
+		ups JSONB,
+		downs JSONB,
 		PRIMARY KEY(version)
 	)`,
 ]

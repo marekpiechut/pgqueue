@@ -25,5 +25,6 @@
 		"validate": "yarn lint && yarn typecheck"
 	},
 	"type": "module",
-	"private": true
+	"private": true,
+	"dependencies": {}
 }

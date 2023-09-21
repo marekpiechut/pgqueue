@@ -8,6 +8,7 @@ export type EvolutionExpression = string
 
 export type Config = {
 	baseName: string
+	destroy_my_data_AllowDownMigration?: boolean
 }
 
 export type Evolution = {
@@ -22,78 +23,50 @@ export type LoadedEvolution = Evolution & {
 
 const loadEvolutions = async (
 	evolutions: Evolution[]
-): Promise<{
-	version: number
-	evolutions: LoadedEvolution[]
-}> => {
-	const loaded: LoadedEvolution[] = evolutions.map((evo, i) => ({
+): Promise<LoadedEvolution[]> => {
+	return evolutions.map((evo, i) => ({
 		...evo,
 		checksum: generateChecksum(evo),
 		version: i + 1,
 	}))
-	const version = evolutions.length
-
-	return {
-		evolutions: loaded,
-		version: version,
-	}
 }
 
 export const apply = async (
-	evolutions: Evolution[],
+	schema: Evolution[],
 	client: pg.ClientBase,
 	config: Config
 ): Promise<void> => {
 	log.info('Applying evolutions')
 	validateConfig(config)
-	const expected = await loadEvolutions(evolutions)
+	const loaded = await loadEvolutions(schema)
 
-	const queries = new EvolutionQueries(client, config)
-	let current = await queries.getCurrentVersion()
-	if (!current) {
-		log.info('No schema found, creating')
-		const sqls = schemaSql(config)
-		client.query(`BEGIN;`)
-		for (const up of sqls) {
-			log.debug(up)
-			await client.query(up)
-		}
-		client.query('COMMIT;')
+	const actions = new EvolutionActions(client, config, loaded)
+	const hasSchema = await actions.hasSchema()
+
+	if (!hasSchema) {
+		log.info('Creating evolutions schema')
+		await actions.createSchema()
 		log.info('Schema created')
-		current = { version: 0 }
 	}
-	if (current.version === expected.version) {
-		const lastEvo = expected.evolutions[expected.evolutions.length - 1]
-		if (!current.checksum || lastEvo.checksum === current.checksum) {
-			log.info('Database schema is up to date')
-			return
-		}
-	} else {
-		log.info(
-			`Updating database schema from ${current.version} to ${expected.version}`
-		)
-		await Promise.all(
-			expected.evolutions.slice(current.version).map(async evo => {
-				log.info(`Applying evolution ${evo.version}`)
-				try {
-					client.query(`BEGIN;`)
-					for (const up of evo.ups) {
-						log.debug(up)
-						await client.query(up)
-					}
-					queries.evolutionApplied(evo)
-					client.query('COMMIT;')
-				} catch (e) {
-					log.error(
-						e,
-						`Failed to apply evolution ${evo.version}, your database might be in inconsistent state.`
-					)
-					client.query(`ROLLBACK;`)
-					throw e
-				}
+
+	if (await actions.hasDown()) {
+		if (config.destroy_my_data_AllowDownMigration) {
+			log.warn(
+				`!!! WARNING !!! Database has down migrations. This will DESTROY YOUR DATA! You have 10 seconds to cancel if you're not sure...`
+			)
+			await new Promise(resolve => {
+				setTimeout(resolve, 10000)
 			})
-		)
+			await actions.applyDown()
+		} else {
+			throw Error(
+				'Database has down migrations. For development use destroy_my_data_AllowDownMigration to apply them. NEVER USE FOR PRODUCTION!'
+			)
+		}
 	}
+
+	await actions.applyUp()
+	log.info('Evolutions applied, database is up to date.')
 }
 
 const validateConfig = (config: Config): void => {
@@ -108,50 +81,137 @@ const generateChecksum = (evo: Evolution): string => {
 	return crypto.createHash('sha1').update(sql).digest('hex')
 }
 
-class EvolutionQueries {
+class EvolutionActions {
 	constructor(
 		private client: pg.ClientBase,
-		private config: Config
+		private config: Config,
+		private evolutions: LoadedEvolution[]
 	) {}
 
-	async getCurrentVersion(): Promise<{
-		version: number
-		checksum?: string
-	} | null> {
+	async createSchema(): Promise<{ version: number }> {
+		const sqls = schemaSql(this.config)
+		this.client.query(`BEGIN;`)
+		for (const up of sqls) {
+			log.debug(up)
+			await this.client.query(up)
+		}
+		this.client.query('COMMIT;')
+		return { version: 0 }
+	}
+
+	async hasDown(): Promise<boolean> {
+		const current = await this.getCurrent()
+		if (!current) return false
+
+		const expected = this.evolutions[current.version - 1]
+
+		return (
+			current.version > expected.version ||
+			(current.version === expected.version &&
+				current.checksum !== expected.checksum)
+		)
+	}
+
+	async applyDown(): Promise<void> {
+		let current
+		while (current) {
+			const expected = this.evolutions[current.version - 1]
+
+			if (!expected || current.checksum !== expected.checksum) {
+				log.warn(`Downgrading database to version ${current.version - 1}`)
+				const downs = current.downs
+				this.client.query(`BEGIN;`)
+				try {
+					if (downs) {
+						await this.apply(downs)
+					}
+					await this.evolutionDropped(current)
+					this.client.query('COMMIT;')
+				} catch (e) {
+					this.client.query(`ROLLBACK;`)
+					throw e
+				}
+			} else {
+				log.info('All down migrations applied')
+				return
+			}
+			current = await this.getCurrent()
+		}
+	}
+
+	async applyUp(): Promise<void> {
+		const current = await this.getCurrent()
+		const currentVersion = current ? current.version : 0
+		const toApply = this.evolutions.slice(currentVersion)
+		for (const evo of toApply) {
+			log.info(`Applying up migration ${evo.version}`)
+			this.client.query(`BEGIN;`)
+			try {
+				await this.apply(evo.ups)
+				await this.evolutionApplied(evo)
+				this.client.query('COMMIT;')
+			} catch (e) {
+				this.client.query(`ROLLBACK;`)
+				throw e
+			}
+		}
+	}
+
+	async apply(sqls: EvolutionExpression[]): Promise<void> {
+		for (const up of sqls) {
+			log.debug(up)
+			await this.client.query(up)
+		}
+	}
+
+	async hasSchema(): Promise<boolean> {
 		const { rows } = await this.client.query(
 			`SELECT 1 as success FROM information_schema.tables
 				WHERE table_schema=ANY(current_schemas(FALSE))
-				AND table_name='${this.config.baseName}_SCHEMA}';
+				AND table_name ilike '${this.config.baseName}_SCHEMA';
 			`
 		)
+		return rows[0]?.success === 1
+	}
 
-		if (rows[0]?.success === 1) {
-			const { rows: versionRows } = await this.client.query(
-				`SELECT * FROM ${this.config.baseName}_SCHEMA
+	async getCurrent(): Promise<LoadedEvolution | null> {
+		const { rows: versionRows } = await this.client.query(
+			`SELECT * FROM ${this.config.baseName}_SCHEMA
 					ORDER BY version DESC LIMIT 1;
 				`
-			)
-			const row = versionRows[0]
-			if (row) {
-				return { version: row.version, checksum: row.checksum }
-			} else {
-				log.warn('No version in schema. Assuming no data.')
-				return { version: 0 }
+		)
+		const row = versionRows[0]
+		if (row) {
+			return {
+				version: row.version,
+				checksum: row.checksum,
+				ups: row.ups,
+				downs: row.downs,
 			}
 		} else {
-			log.info('Could not find schema in DB. Assuming no data.')
+			log.warn('No version in schema. Assuming no data.')
 			return null
 		}
 	}
 
-	async evolutionApplied(evo: {
-		version: number
-		checksum: string
-	}): Promise<void> {
+	async evolutionDropped(evo: LoadedEvolution): Promise<void> {
 		await this.client.query(
-			`INSERT INTO ${this.config.baseName}_SCHEMA (version, checksum)
-				VALUES (${evo.version}, '${evo.checksum}');
-			`
+			`DELETE FROM ${this.config.baseName}_SCHEMA WHERE version = $1`,
+			[evo.version]
+		)
+	}
+
+	async evolutionApplied(evo: LoadedEvolution): Promise<void> {
+		await this.client.query(
+			`INSERT INTO ${this.config.baseName}_SCHEMA (version, checksum, ups, downs)
+				VALUES ($1, $2, $3, $4);
+			`,
+			[
+				evo.version,
+				evo.checksum,
+				JSON.stringify(evo.ups),
+				JSON.stringify(evo.downs),
+			]
 		)
 	}
 }

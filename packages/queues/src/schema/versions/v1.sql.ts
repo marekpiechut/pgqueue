@@ -10,25 +10,25 @@ type Config = {
 export default (config: Config): Evolution => ({
 	ups: [
 		`CREATE TABLE ${config.baseName}_QUEUE (
-			uuid UUID NOT NULL,
+			id UUID NOT NULL,
 			created TIMESTAMP NOT NULL,
 			state VARCHAR(16) NOT NULL,
 			type VARCHAR(${config.typeSize}) NOT NULL,
 			priority INTEGER,
 			tries INTEGER,
-			body JSONB,
-			PRIMARY KEY(uuid)
+			payload JSONB,
+			PRIMARY KEY(id)
 		)`,
 		`CREATE TABLE ${config.baseName}_QUEUE_HISTORY (
-			uuid UUID NOT NULL,
+			id UUID NOT NULL,
 			created TIMESTAMP NOT NULL,
 			state VARCHAR(16) NOT NULL,
 			type VARCHAR(${config.typeSize}) NOT NULL,
 			priority INTEGER,
 			tries INTEGER,
-			body JSONB,
+			payload JSONB,
 			error TEXT,
-			PRIMARY KEY(uuid)
+			PRIMARY KEY(id)
 		)`,
 
 		`CREATE OR REPLACE FUNCTION ${config.baseName}_QUEUE_ADDED() RETURNS trigger AS $$
