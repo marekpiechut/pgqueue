@@ -3,13 +3,14 @@ import { Evolution } from '@pgqueue/evolutions'
 //TODO: create indexes
 
 type Config = {
-	baseName: string
+	schema: string
 	typeSize: number
 	eventBase: string
 }
 export default (config: Config): Evolution => ({
 	ups: [
-		`CREATE TABLE ${config.baseName}_QUEUE (
+		`CREATE SCHEMA IF NOT EXISTS ${config.schema}`,
+		`CREATE TABLE ${config.schema}.QUEUE (
 			id UUID NOT NULL,
 			created TIMESTAMP NOT NULL,
 			state VARCHAR(16) NOT NULL,
@@ -19,7 +20,7 @@ export default (config: Config): Evolution => ({
 			payload JSONB,
 			PRIMARY KEY(id)
 		)`,
-		`CREATE TABLE ${config.baseName}_QUEUE_HISTORY (
+		`CREATE TABLE ${config.schema}.QUEUE_HISTORY (
 			id UUID NOT NULL,
 			created TIMESTAMP NOT NULL,
 			state VARCHAR(16) NOT NULL,
@@ -31,7 +32,7 @@ export default (config: Config): Evolution => ({
 			PRIMARY KEY(id)
 		)`,
 
-		`CREATE OR REPLACE FUNCTION ${config.baseName}_QUEUE_ADDED() RETURNS trigger AS $$
+		`CREATE OR REPLACE FUNCTION ${config.schema}.QUEUE_ADDED() RETURNS trigger AS $$
 			BEGIN
 				PERFORM pg_notify('${config.eventBase}:added', NEW.type);
 				RETURN NEW;
@@ -39,16 +40,16 @@ export default (config: Config): Evolution => ({
 			$$ LANGUAGE plpgsql;
 		`,
 
-		`DROP TRIGGER IF EXISTS ${config.baseName}_TR_QUEUE_ADDED ON events;`,
-		`CREATE OR REPLACE TRIGGER ${config.baseName}_TR_QUEUE_ADDED
-			AFTER INSERT ON ${config.baseName}_QUEUE
+		`DROP TRIGGER IF EXISTS TR_QUEUE_ADDED ON ${config.schema}.QUEUE;`,
+		`CREATE OR REPLACE TRIGGER TR_QUEUE_ADDED
+			AFTER INSERT ON ${config.schema}.QUEUE
 			FOR EACH STATEMENT EXECUTE PROCEDURE
-			${config.baseName}_QUEUE_ADDED();
+			${config.schema}.QUEUE_ADDED();
 		`,
 	],
 	downs: [
-		`DROP TABLE ${config.baseName}_QUEUE`,
-		`DROP TABLE ${config.baseName}_QUEUE_HISTORY`,
-		`DROP TRIGGER ${config.baseName}_TR_QUEUE_ADDED ON events;`,
+		`DROP TABLE ${config.schema}.QUEUE`,
+		`DROP TABLE ${config.schema}.QUEUE_HISTORY`,
+		`DROP TRIGGER ${config.schema}.TR_QUEUE_ADDED ON ${config.schema}.QUEUE;`,
 	],
 })

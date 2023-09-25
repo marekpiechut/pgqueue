@@ -1,14 +1,18 @@
 import pg from 'pg'
 import crypto from 'crypto'
 import { logger } from '@pgqueue/core'
-import schemaSql from './schema.sql'
+import schemaSql from './schema.sql.js'
 
 const log = logger.create('schema:evolutions')
 export type EvolutionExpression = string
 
 export type Config = {
-	baseName: string
+	schema?: string
 	destroy_my_data_AllowDownMigration?: boolean
+}
+
+const CONFIG_DEFAULTS = {
+	schema: 'public',
 }
 
 export type Evolution = {
@@ -37,10 +41,9 @@ export const apply = async (
 	config: Config
 ): Promise<void> => {
 	log.info('Applying evolutions')
-	validateConfig(config)
 	const loaded = await loadEvolutions(schema)
-
-	const actions = new EvolutionActions(client, config, loaded)
+	const configWithDefaults = { ...CONFIG_DEFAULTS, ...config }
+	const actions = new EvolutionActions(client, configWithDefaults, loaded)
 	const hasSchema = await actions.hasSchema()
 
 	if (!hasSchema) {
@@ -69,12 +72,6 @@ export const apply = async (
 	log.info('Evolutions applied, database is up to date.')
 }
 
-const validateConfig = (config: Config): void => {
-	if (!config.baseName) {
-		throw Error('Missing baseName in config')
-	}
-}
-
 const generateChecksum = (evo: Evolution): string => {
 	const sql = evo.ups.map(s => s.trim()).join('; ')
 
@@ -84,7 +81,7 @@ const generateChecksum = (evo: Evolution): string => {
 class EvolutionActions {
 	constructor(
 		private client: pg.ClientBase,
-		private config: Config,
+		private config: typeof CONFIG_DEFAULTS & Config,
 		private evolutions: LoadedEvolution[]
 	) {}
 
@@ -167,8 +164,8 @@ class EvolutionActions {
 	async hasSchema(): Promise<boolean> {
 		const { rows } = await this.client.query(
 			`SELECT 1 as success FROM information_schema.tables
-				WHERE table_schema=ANY(current_schemas(FALSE))
-				AND table_name ilike '${this.config.baseName}_SCHEMA';
+				WHERE table_schema='${this.config.schema}'
+				AND table_name ilike 'SCHEMA';
 			`
 		)
 		return rows[0]?.success === 1
@@ -176,7 +173,7 @@ class EvolutionActions {
 
 	async getCurrent(): Promise<LoadedEvolution | null> {
 		const { rows: versionRows } = await this.client.query(
-			`SELECT * FROM ${this.config.baseName}_SCHEMA
+			`SELECT * FROM ${this.config.schema}.SCHEMA
 					ORDER BY version DESC LIMIT 1;
 				`
 		)
@@ -196,14 +193,14 @@ class EvolutionActions {
 
 	async evolutionDropped(evo: LoadedEvolution): Promise<void> {
 		await this.client.query(
-			`DELETE FROM ${this.config.baseName}_SCHEMA WHERE version = $1`,
+			`DELETE FROM ${this.config.schema}.SCHEMA WHERE version = $1`,
 			[evo.version]
 		)
 	}
 
 	async evolutionApplied(evo: LoadedEvolution): Promise<void> {
 		await this.client.query(
-			`INSERT INTO ${this.config.baseName}_SCHEMA (version, checksum, ups, downs)
+			`INSERT INTO ${this.config.schema}.SCHEMA (version, checksum, ups, downs)
 				VALUES ($1, $2, $3, $4);
 			`,
 			[

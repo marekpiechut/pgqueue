@@ -8,7 +8,7 @@ chai.use(chaiAsPromised)
 chai.use(chaiString)
 
 export { chai, assert }
-export * as async from './async'
+export * as async from './async.js'
 
 export const mochaHooks = {
 	beforeEach(): void {

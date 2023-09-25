@@ -1,7 +1,8 @@
-import { Config, EvolutionExpression } from './index'
+import { Config, EvolutionExpression } from './index.js'
 
 export default (config: Config): EvolutionExpression[] => [
-	`CREATE TABLE IF NOT EXISTS ${config.baseName}_SCHEMA (
+	`CREATE SCHEMA IF NOT EXISTS ${config.schema}`,
+	`CREATE TABLE IF NOT EXISTS ${config.schema}.SCHEMA (
 		version INTEGER NOT NULL,
 		checksum VARCHAR(64),
 		applied TIMESTAMP NOT NULL DEFAULT NOW(),

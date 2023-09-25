@@ -11,17 +11,17 @@ const EVOLUTIONS = ['./versions/v1.sql']
  ***********************************/
 
 export type Config = evolutions.Config & {
-	typeSize: number
-	eventBase: string
+	schema: string
+	typeSize?: number
+	eventBase?: string
 }
-export const DEFAULT_CONFIG: Config = {
-	baseName: 'events',
+export const DEFAULT_CONFIG = {
 	typeSize: 16,
 	eventBase: 'pgevents:queue',
 }
 
 export const applyEvolutions = async (
-	config: Partial<Config>,
+	config: Config,
 	client: pg.ClientBase
 ): Promise<void> => {
 	const mergedConfig = { ...DEFAULT_CONFIG, ...config }
@@ -32,7 +32,7 @@ export const applyEvolutions = async (
 	return evolutions.apply(sqls, client, mergedConfig)
 }
 
-const validateConfig = (config: Config): void => {
+const validateConfig = (config: typeof DEFAULT_CONFIG & Config): void => {
 	if (config.typeSize < 16) {
 		throw Error('Type size must be at least 16 characters')
 	}

@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-import { program } from 'commander'
-import { emit, listen } from './commands/broadcast.js'
 import { logger } from '@pgqueue/core'
-
-logger.setLevel('error')
+import { program } from 'commander'
+import { poll, push } from './commands/queue.js'
+import { emit, listen } from './commands/broadcast.js'
 
 program
 	.option('-p, --port <port>', 'Postgres port', '5432')
@@ -11,8 +10,20 @@ program
 	.option('-u, --user <username>', 'Postgres user', 'postgres')
 	.option('-w, --pass <password>', 'Postgres password', 'postgres')
 	.option('-d, --db <database>', 'Postgres database', 'postgres')
+	.option('-l --log-level <level>', 'Log level', 'info')
+	.hook('preAction', cmd => {
+		const level = cmd.opts().logLevel
+		if (level) {
+			logger.setLevel(level)
+		}
+	})
 
 program.addCommand(listen)
 program.addCommand(emit)
+program.addCommand(push)
+program.addCommand(poll)
 
-program.parse(process.argv)
+await program.parseAsync().catch(e => {
+	console.error(e)
+	process.exit(1)
+})
