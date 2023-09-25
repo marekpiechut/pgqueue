@@ -12,9 +12,12 @@ export default (config: Config): Evolution => ({
 		`CREATE SCHEMA IF NOT EXISTS ${config.schema}`,
 		`CREATE TABLE ${config.schema}.QUEUE (
 			id UUID NOT NULL,
+			key VARCHAR(64) UNIQUE DEFAULT NULL,
+			type VARCHAR(${config.typeSize}) NOT NULL,
 			created TIMESTAMP NOT NULL,
 			state VARCHAR(16) NOT NULL,
-			type VARCHAR(${config.typeSize}) NOT NULL,
+			next_run TIMESTAMP,
+			schedule VARCHAR(64),
 			priority INTEGER,
 			tries INTEGER,
 			payload JSONB,
@@ -22,9 +25,11 @@ export default (config: Config): Evolution => ({
 		)`,
 		`CREATE TABLE ${config.schema}.QUEUE_HISTORY (
 			id UUID NOT NULL,
+			key VARCHAR(64),
+			type VARCHAR(${config.typeSize}) NOT NULL,
 			created TIMESTAMP NOT NULL,
 			state VARCHAR(16) NOT NULL,
-			type VARCHAR(${config.typeSize}) NOT NULL,
+			schedule VARCHAR(64),
 			priority INTEGER,
 			tries INTEGER,
 			payload JSONB,
@@ -50,6 +55,5 @@ export default (config: Config): Evolution => ({
 	downs: [
 		`DROP TABLE ${config.schema}.QUEUE`,
 		`DROP TABLE ${config.schema}.QUEUE_HISTORY`,
-		`DROP TRIGGER ${config.schema}.TR_QUEUE_ADDED ON ${config.schema}.QUEUE;`,
 	],
 })

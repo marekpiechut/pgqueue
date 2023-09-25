@@ -87,12 +87,12 @@ class EvolutionActions {
 
 	async createSchema(): Promise<{ version: number }> {
 		const sqls = schemaSql(this.config)
-		this.client.query(`BEGIN;`)
+		await this.client.query(`BEGIN;`)
 		for (const up of sqls) {
 			log.debug(up)
 			await this.client.query(up)
 		}
-		this.client.query('COMMIT;')
+		await this.client.query('COMMIT;')
 		return { version: 0 }
 	}
 
@@ -102,30 +102,36 @@ class EvolutionActions {
 
 		const expected = this.evolutions[current.version - 1]
 
-		return (
-			current.version > expected.version ||
-			(current.version === expected.version &&
-				current.checksum !== expected.checksum)
-		)
+		const needsDowngrade = current.version > expected.version
+		const checksumMismatch = current.checksum !== expected.checksum
+
+		if (needsDowngrade) {
+			log.warn(
+				`Database needs a downgrade from version${current.version} to ${expected.version}!`
+			)
+		} else if (checksumMismatch) {
+			log.warn('Database checksum mismatch!')
+		}
+		return needsDowngrade || checksumMismatch
 	}
 
 	async applyDown(): Promise<void> {
-		let current
+		let current = await this.getCurrent()
 		while (current) {
 			const expected = this.evolutions[current.version - 1]
 
 			if (!expected || current.checksum !== expected.checksum) {
 				log.warn(`Downgrading database to version ${current.version - 1}`)
 				const downs = current.downs
-				this.client.query(`BEGIN;`)
+				await this.client.query(`BEGIN;`)
 				try {
 					if (downs) {
 						await this.apply(downs)
 					}
 					await this.evolutionDropped(current)
-					this.client.query('COMMIT;')
+					await this.client.query('COMMIT;')
 				} catch (e) {
-					this.client.query(`ROLLBACK;`)
+					await this.client.query(`ROLLBACK;`)
 					throw e
 				}
 			} else {
@@ -142,13 +148,13 @@ class EvolutionActions {
 		const toApply = this.evolutions.slice(currentVersion)
 		for (const evo of toApply) {
 			log.info(`Applying up migration ${evo.version}`)
-			this.client.query(`BEGIN;`)
+			await this.client.query(`BEGIN;`)
 			try {
 				await this.apply(evo.ups)
 				await this.evolutionApplied(evo)
-				this.client.query('COMMIT;')
+				await this.client.query('COMMIT;')
 			} catch (e) {
-				this.client.query(`ROLLBACK;`)
+				await this.client.query(`ROLLBACK;`)
 				throw e
 			}
 		}

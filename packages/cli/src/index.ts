@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { logger } from '@pgqueue/core'
 import { program } from 'commander'
-import { poll, push } from './commands/queue.js'
+import { db } from 'commands/db.js'
 import { emit, listen } from './commands/broadcast.js'
+import { poll, push } from './commands/queue.js'
 
 program
+	.name('pgqueue')
 	.option('-p, --port <port>', 'Postgres port', '5432')
 	.option('-h, --host <host>', 'Postgres host', 'localhost')
 	.option('-u, --user <username>', 'Postgres user', 'postgres')
@@ -22,6 +24,7 @@ program.addCommand(listen)
 program.addCommand(emit)
 program.addCommand(push)
 program.addCommand(poll)
+program.addCommand(db)
 
 await program.parseAsync().catch(e => {
 	console.error(e)

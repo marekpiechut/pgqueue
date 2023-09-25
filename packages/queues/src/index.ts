@@ -4,8 +4,9 @@ import { Job, JobOptions, newJob } from './models.js'
 import { JobRepository } from './persistence/job-repository.js'
 import { applyEvolutions } from './schema/index.js'
 
+export const DEFAULT_SCHEMA = 'pgqueues'
 const log = logger.create('queues')
-const dbConfig = { typeSize: 32, schema: 'pgqueues' }
+const dbConfig = { typeSize: 32, schema: DEFAULT_SCHEMA }
 type JobContext<P> = {
 	postpone: (options?: JobOptions) => Promise<Job<P>>
 }
@@ -27,6 +28,15 @@ const fromPool = async (pool: pg.Pool): Promise<Queues> => {
 		connection.release()
 	}
 	return queues(pool)
+}
+
+export const evolutions = {
+	apply: (
+		client: pg.ClientBase,
+		config: { destroy_my_data_AllowDownMigration?: boolean }
+	): Promise<void> => {
+		return applyEvolutions({ ...dbConfig, ...config }, client)
+	},
 }
 
 const queues = (pool: pg.Pool): Queues => {
@@ -111,6 +121,8 @@ export const queue = (client: pg.ClientBase): Queue => ({
 })
 
 export default {
+	DEFAULT_SCHEMA,
 	queue,
+	evolutions,
 	fromPool,
 }
