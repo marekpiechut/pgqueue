@@ -15,12 +15,14 @@ export default (config: Config): Evolution => ({
 			key VARCHAR(64) UNIQUE DEFAULT NULL,
 			type VARCHAR(${config.typeSize}) NOT NULL,
 			created TIMESTAMP NOT NULL,
+			updated TIMESTAMP,
 			state VARCHAR(16) NOT NULL,
 			next_run TIMESTAMP,
 			schedule VARCHAR(64),
 			priority INTEGER,
 			tries INTEGER,
 			payload JSONB,
+			error TEXT,
 			PRIMARY KEY(id)
 		)`,
 		`CREATE TABLE ${config.schema}.QUEUE_HISTORY (
@@ -28,11 +30,13 @@ export default (config: Config): Evolution => ({
 			key VARCHAR(64),
 			type VARCHAR(${config.typeSize}) NOT NULL,
 			created TIMESTAMP NOT NULL,
+			updated TIMESTAMP,
 			state VARCHAR(16) NOT NULL,
 			schedule VARCHAR(64),
 			priority INTEGER,
 			tries INTEGER,
 			payload JSONB,
+			result JSONB,
 			error TEXT,
 			PRIMARY KEY(id)
 		)`,
@@ -44,8 +48,6 @@ export default (config: Config): Evolution => ({
 			END;
 			$$ LANGUAGE plpgsql;
 		`,
-
-		`DROP TRIGGER IF EXISTS TR_QUEUE_ADDED ON ${config.schema}.QUEUE;`,
 		`CREATE OR REPLACE TRIGGER TR_QUEUE_ADDED
 			AFTER INSERT ON ${config.schema}.QUEUE
 			FOR EACH STATEMENT EXECUTE PROCEDURE

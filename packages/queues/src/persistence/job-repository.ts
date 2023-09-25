@@ -1,16 +1,19 @@
 import pg from 'pg'
-import { Job, JobId } from '../models.js'
+import { Job, JobId, PendingJob } from '../models.js'
 
 type JsonSerializable = unknown
 type JobRow = {
 	id: string
 	type: string
 	created: Date
+	updated?: Date
 	state: string
 	payload: JsonSerializable
+	result?: JsonSerializable | null
 }
-const toRow = <P>(job: Job<P>): JobRow => job
-const toJob = <P>(row: JobRow): Job<P> => row as Job<P>
+const toRow = <P, R>(job: Job<P, R>): JobRow => job
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const toJob = <J extends Job<any, any>>(row: JobRow): J => row as J
 
 type DBConfig = {
 	schema: string
@@ -21,7 +24,7 @@ export class JobRepository {
 		private config: DBConfig
 	) {}
 
-	public async push<P>(job: Job<P>): Promise<Job<P>> {
+	public async create<P>(job: PendingJob<P>): Promise<PendingJob<P>> {
 		const { client, config } = this
 		const { schema } = config
 		const row = toRow(job)
@@ -31,39 +34,46 @@ export class JobRepository {
 		)
 		return job
 	}
-	public async pop<P>(types: string[]): Promise<Job<P> | undefined> {
+
+	public async update<J extends Job<unknown, unknown>>(job: J): Promise<J> {
+		const { client, config } = this
+		const { schema } = config
+		const row = toRow(job)
+		const res = await client.query(
+			`UPDATE ${schema}.QUEUE set 
+				state=$2, updated=$3
+				WHERE id=$1
+			`,
+			[row.id, row.state, row.updated]
+		)
+		if (res.rowCount !== 1) {
+			throw new Error(`Failed to find job for update: ${job.id}`)
+		}
+		return job
+	}
+
+	public async delete(id: JobId): Promise<number> {
+		const { client, config } = this
+		const { schema } = config
+		const res = await client.query(`DELETE FROM ${schema}.QUEUE WHERE id=$1`, [
+			id,
+		])
+		return res.rowCount
+	}
+
+	public async pop<P>(types: string[]): Promise<PendingJob<P> | undefined> {
 		const { client, config } = this
 		const { schema } = config
 		const { rows } = await client.query<JobRow>(
 			`SELECT * FROM ${schema}.QUEUE 
-				 WHERE type = ANY($1) ORDER BY created, id ASC LIMIT 1
-				 FOR UPDATE SKIP LOCKED
-			`,
+					WHERE type=ANY($1) AND state='PENDING' 
+					ORDER BY created, id ASC LIMIT 1
+					FOR UPDATE SKIP LOCKED
+				`,
 			[types]
 		)
 		if (rows.length === 0) return undefined
 		const row = rows[0]
-		return toJob(row)
-	}
-	public async peek<P>(
-		types: string[],
-		limit?: number,
-		before?: JobId
-	): Promise<ReadonlyArray<Job<P>>> {
-		const { client, config } = this
-		const { schema } = config
-		const { rows } = await client.query<JobRow>(
-			`WITH last(created, id) AS (
-				SELECT created, id FROM ${schema}.QUEUE WHERE id = $2
-			)
-			SELECT * FROM ${schema}.QUEUE 
-				 WHERE type = ANY($1) AND
-				 (created, id) < (last.created, $2)
-				 ORDER BY created, id ASC LIMIT $3
-			`,
-			[types, before, limit]
-		)
-
-		return rows.map(toJob) as ReadonlyArray<Job<P>>
+		return toJob(row) as PendingJob<P>
 	}
 }

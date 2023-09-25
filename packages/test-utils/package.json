@@ -21,6 +21,7 @@
 	"private": true,
 	"scripts": {
 		"build": "tsc",
+		"watch": "tsc -w",
 		"clean": "shx rm -rf ./lib",
 		"typecheck": "tsc --noEmit",
 		"lint": "eslint --ext .ts --max-warnings 0 src/**",

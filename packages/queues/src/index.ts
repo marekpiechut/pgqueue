@@ -1,16 +1,29 @@
 import { logger } from '@pgqueue/core'
 import pg from 'pg'
-import { Job, JobOptions, newJob } from './models.js'
+import {
+	JobOptions,
+	PendingJob,
+	RunningJob,
+	completeJob,
+	newJob,
+	startJob,
+} from './models.js'
 import { JobRepository } from './persistence/job-repository.js'
+import { JobHistoryRepository } from './persistence/job-history-repository.js'
 import { applyEvolutions } from './schema/index.js'
 
 export const DEFAULT_SCHEMA = 'pgqueues'
 const log = logger.create('queues')
+
 const dbConfig = { typeSize: 32, schema: DEFAULT_SCHEMA }
 type JobContext<P> = {
-	postpone: (options?: JobOptions) => Promise<Job<P>>
+	postpone: (options?: JobOptions) => Promise<PendingJob<P>>
 }
-type JobHandler<P, R> = (job: Job<P>, context: JobContext<P>) => Promise<R>
+type JobHandler<P, R> = (
+	job: RunningJob<P>,
+	context: JobContext<P>
+) => Promise<R>
+
 type Unsubscribe = () => Promise<void>
 type Queues = {
 	on<P, R>(name: string, handler: JobHandler<P, R>): Promise<Unsubscribe>
@@ -43,41 +56,55 @@ const queues = (pool: pg.Pool): Queues => {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const handlers: Record<string, JobHandler<any, any>> = {}
 
+	const createContext = <P>(_job: RunningJob<P>): JobContext<P> => ({
+		postpone: async _ => {
+			throw new Error('Not implemented')
+		},
+	})
+
 	const poll = async (): Promise<void> => {
 		log.debug('Polling for jobs')
 		const client = await pool.connect()
 		try {
 			const repository = new JobRepository(client, dbConfig)
+			const historyRepository = new JobHistoryRepository(client, dbConfig)
 			await client.query('BEGIN')
-			const next = await repository.pop(Object.keys(handlers))
-			if (next) {
-				const handler = handlers[next.type]
+			const job = await repository.pop(Object.keys(handlers))
+			if (job) {
+				const handler = handlers[job.type]
 				if (handler) {
 					try {
-						const res = await handler(next, {
-							postpone: async _ => {
-								throw new Error('Not implemented')
-							},
-						})
-						//TODO: handle result
-						//TODO: consume job
-						log.debug('Job processed', next.type, 'returned', res)
+						const startedJob = await repository.update(startJob(job))
+						const context = createContext(startedJob)
+						try {
+							const res = await handler(startedJob, context)
+
+							await repository.delete(startedJob.id)
+							const completedJob = await historyRepository.create(
+								completeJob(startedJob, res)
+							)
+							log.debug('Job processed', completedJob)
+						} catch (err) {
+							log.error(err, 'Error while processing job')
+							//TODO: store error and update attempts
+							//move to job history if attempts > max
+							throw err
+						}
 					} catch (err) {
-						log.error(err, 'Error while processing job')
+						log.error(err, 'Failed to start acquired job', job)
 						throw err
 					}
 				}
 			}
-			client.query('COMMIT')
+			await client.query('COMMIT')
 		} catch (err) {
-			client.query('ROLLBACK')
+			await client.query('ROLLBACK')
 		} finally {
-			client.release()
+			await client.release()
 		}
 	}
 
 	const instance: Queues = {
-		//TODO: make sure we have only one handler for given job type
 		on: async (name, handler) => {
 			log.debug('Registering handler for job type', name)
 			const current = handlers[name]
@@ -91,7 +118,7 @@ const queues = (pool: pg.Pool): Queues => {
 			}
 		},
 		off: async name => {
-			log.debug('Removing handler for job type', name)
+			log.info('Removing handler for job type', name)
 			delete handlers[name]
 		},
 		start: async () => {
@@ -103,18 +130,22 @@ const queues = (pool: pg.Pool): Queues => {
 }
 
 type Queue = {
-	push<P>(name: string, payload: P, options?: JobOptions): Promise<Job<P>>
+	push<P>(
+		name: string,
+		payload: P,
+		options?: JobOptions
+	): Promise<PendingJob<P>>
 }
 export const queue = (client: pg.ClientBase): Queue => ({
 	async push<P>(
 		name: string,
 		payload: P,
 		options?: JobOptions
-	): Promise<Job<P>> {
+	): Promise<PendingJob<P>> {
 		const repository = new JobRepository(client, dbConfig)
 		const job = newJob(name, payload, options)
 		log.debug(`Pushing job "${name}"`, job)
-		const res = await repository.push(job)
+		const res = await repository.create(job)
 		log.debug(`Job pushed "${name}"`, res)
 		return res
 	},

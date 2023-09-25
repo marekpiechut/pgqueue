@@ -10,13 +10,14 @@ push
 	.description('Push a job to queue')
 	.argument('name', 'job name')
 	.argument('payload...', `job payload - ${PAYLOAD_FORMAT_HELP}`)
-	.action(async (name, payload) => {
+	.action(async (name, data) => {
 		const opts = push.optsWithGlobals()
 		const client = new pg.Client(pgConfig(opts))
 		await client.connect()
 		try {
+			const payload = data?.length ? parsePayload(data) : undefined
 			const queue = await queues.queue(client)
-			const job = await queue.push(name, parsePayload(payload))
+			const job = await queue.push(name, payload)
 			console.log(`Job pushed "${name}"`, job)
 		} finally {
 			await client.end()
@@ -27,8 +28,8 @@ export const poll = new Command('poll')
 poll
 	.description('Listen to queue and consume jobs.')
 	.argument('name', 'job name')
-	.option('-y, --yes', 'Confirm processing of jobs')
-	.action(async name => {
+	.argument('[result...]', `job result - ${PAYLOAD_FORMAT_HELP}`)
+	.action(async (name, data) => {
 		if (!poll.opts().yes) {
 			const answer = await ask(`
 WARNING: You are about to start polling the queue "${name}".
@@ -42,14 +43,20 @@ Enter "yes" to continue.\n`)
 				return
 			}
 		}
-		console.warn(`Polling queue ${name} (THIS WILL CONSUME JOBS !!!)`)
 
 		const opts = push.optsWithGlobals()
 		const pool = new pg.Pool(pgConfig(opts))
 		await pool.connect()
 		const queue = await queues.fromPool(pool)
+		const result = data?.length ? parsePayload(data) : undefined
+		console.warn(
+			`Polling queue ${name} ${
+				result ? 'with result: \n' + JSON.stringify(result, null, 2) + '\n' : ''
+			}(THIS WILL CONSUME JOBS !!!)`
+		)
 		queue.on(name, async job => {
-			console.log(`Job consumed"${name}"`, job)
+			console.log(`Job consumed: "${name}"`, job)
+			return result
 		})
 		queue.start()
 	})

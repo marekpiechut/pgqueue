@@ -21,6 +21,7 @@
 	"private": true,
 	"scripts": {
 		"build": "tsc",
+		"watch": "tsc -w",
 		"clean": "shx rm -rf ./lib",
 		"test": "mocha --require tsx --require @pgqueue/test-utils src/**/*.test.ts",
 		"typecheck": "tsc --noEmit",
