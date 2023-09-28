@@ -27,5 +27,7 @@
 	},
 	"type": "module",
 	"private": true,
-	"dependencies": {}
+	"dependencies": {
+		"cron-parser": "^4.9.0"
+	}
 }

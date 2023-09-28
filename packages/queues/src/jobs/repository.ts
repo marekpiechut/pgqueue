@@ -1,5 +1,6 @@
 import pg from 'pg'
-import { Job, JobId, PendingJob } from '../models.js'
+import { JobId } from '../models.js'
+import { ArchivalJob, Job, PendingJob } from './models.js'
 
 type JsonSerializable = unknown
 type JobRow = {
@@ -9,11 +10,37 @@ type JobRow = {
 	updated?: Date
 	state: string
 	payload: JsonSerializable
-	result?: JsonSerializable | null
 }
 const toRow = <P, R>(job: Job<P, R>): JobRow => job
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const toJob = <J extends Job<any, any>>(row: JobRow): J => row as J
+
+type ArchivalJobRow = JobRow & {
+	result?: JsonSerializable | null
+	error?: string | null
+}
+const toArchivalRow = <P, R>(job: ArchivalJob<P, R>): ArchivalJobRow => {
+	if (job.state === 'COMPLETED') {
+		return job
+	} else {
+		return {
+			...job,
+			error: job.error?.toString() ?? null,
+		}
+	}
+}
+const toArchivalJob = <J extends ArchivalJob<unknown, unknown>>(
+	row: ArchivalJobRow
+): J => {
+	if (row.state === 'COMPLETED') {
+		return row as J
+	} else {
+		return {
+			...row,
+			error: row.error ? new Error(row.error) : undefined,
+		} as J
+	}
+}
 
 type DBConfig = {
 	schema: string
@@ -75,5 +102,42 @@ export class JobRepository {
 		if (rows.length === 0) return undefined
 		const row = rows[0]
 		return toJob(row) as PendingJob<P>
+	}
+
+	public async archive<J extends ArchivalJob<unknown, unknown>>(
+		job: J
+	): Promise<J> {
+		const { client, config } = this
+		const { schema } = config
+		const row = toArchivalRow(job)
+		await client.query(
+			`INSERT INTO ${schema}.QUEUE_HISTORY
+				(id, type, created, state, payload, result, error)
+				VALUES
+				($1, $2, $3, $4, $5, $6, $7)`,
+			[
+				row.id,
+				row.type,
+				row.created,
+				row.state,
+				row.payload,
+				row.result,
+				row.error?.toString(),
+			]
+		)
+		return job
+	}
+
+	public async fetchArchive(
+		id: JobId
+	): Promise<ArchivalJob<unknown, unknown> | undefined> {
+		const { client, config } = this
+		const { schema } = config
+		const { rows } = await client.query<ArchivalJobRow>(
+			`SELECT * FROM ${schema}.QUEUE_HISTORY WHERE id=$1`,
+			[id]
+		)
+		if (rows.length === 0) return undefined
+		return toArchivalJob(rows[0])
 	}
 }

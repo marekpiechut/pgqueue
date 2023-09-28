@@ -14,7 +14,7 @@ const evolutions = new Command('evolutions')
 		queues.DEFAULT_SCHEMA
 	)
 	.option(
-		'--destory-my-data-apply-down',
+		'--destroy-my-data-apply-down',
 		"Apply down evolutions. DON'T DO THIS IN PRODUCTION !!!"
 	)
 	.description('Run database evolutions')
@@ -27,7 +27,7 @@ const evolutions = new Command('evolutions')
 
 		try {
 			const options = {
-				destroy_my_data_AllowDownMigration: opts.destoryMyDataApplyDown,
+				destroy_my_data_AllowDownMigration: opts.destroyMyDataApplyDown,
 				schema: opts.schema,
 			}
 			await queues.evolutions.apply(client, options)

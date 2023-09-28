@@ -12,28 +12,21 @@ const EVOLUTIONS = ['./versions/v1.sql']
 
 export type Config = evolutions.Config & {
 	schema: string
-	typeSize?: number
-	eventBase?: string
-}
-export const DEFAULT_CONFIG = {
-	typeSize: 16,
-	eventBase: 'pgevents:queue',
 }
 
 export const applyEvolutions = async (
 	config: Config,
 	client: pg.ClientBase
 ): Promise<void> => {
-	const mergedConfig = { ...DEFAULT_CONFIG, ...config }
-	validateConfig(mergedConfig)
+	validateConfig(config)
 	const sqls = await Promise.all(EVOLUTIONS.map(evo => import(evo))).then(
-		evos => evos.map(evo => evo.default(mergedConfig))
+		evos => evos.map(evo => evo.default(config))
 	)
-	return evolutions.apply(sqls, client, mergedConfig)
+	return evolutions.apply(sqls, client, config)
 }
 
-const validateConfig = (config: typeof DEFAULT_CONFIG & Config): void => {
-	if (config.typeSize < 16) {
-		throw Error('Type size must be at least 16 characters')
+const validateConfig = (config: Config): void => {
+	if (!config.schema) {
+		throw Error('Database schema is required')
 	}
 }

@@ -7,9 +7,8 @@ import {
 	completeJob,
 	newJob,
 	startJob,
-} from './models.js'
-import { JobRepository } from './persistence/job-repository.js'
-import { JobHistoryRepository } from './persistence/job-history-repository.js'
+} from './jobs/models.js'
+import { JobRepository } from './jobs/repository.js'
 import { applyEvolutions } from './schema/index.js'
 
 export const DEFAULT_SCHEMA = 'pgqueues'
@@ -67,7 +66,6 @@ const queues = (pool: pg.Pool): Queues => {
 		const client = await pool.connect()
 		try {
 			const repository = new JobRepository(client, dbConfig)
-			const historyRepository = new JobHistoryRepository(client, dbConfig)
 			await client.query('BEGIN')
 			const job = await repository.pop(Object.keys(handlers))
 			if (job) {
@@ -80,7 +78,7 @@ const queues = (pool: pg.Pool): Queues => {
 							const res = await handler(startedJob, context)
 
 							await repository.delete(startedJob.id)
-							const completedJob = await historyRepository.create(
+							const completedJob = await repository.archive(
 								completeJob(startedJob, res)
 							)
 							log.debug('Job processed', completedJob)
@@ -149,6 +147,19 @@ export const queue = (client: pg.ClientBase): Queue => ({
 		log.debug(`Job pushed "${name}"`, res)
 		return res
 	},
+	// async schedule<P>(
+	// 	name: string,
+	// 	payload: P,
+	// 	schedule: schedule.Schedule,
+	// 	options?: ScheduledJobOptions
+	// ): Promise<PendingJob<P>> {
+	// 	const repository = new JobRepository(client, dbConfig)
+	// 	const job = newJob(name, payload, options)
+	// 	log.debug(`Scheduling job "${name}"`, job)
+	// 	const res = await repository.create(job)
+	// 	log.debug(`Job scheduled "${name}"`, res)
+	// 	return res
+	// },
 })
 
 export default {
