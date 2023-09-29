@@ -1,5 +1,5 @@
 import cron from 'cron-parser'
-import { durations } from './duration.js'
+import { durations } from '../duration.js'
 
 type CronOptions = {
 	tz?: string
@@ -74,4 +74,10 @@ type CronSchedule = {
 	type: 'cron'
 	cron: string
 	startAt?: Date
+}
+
+export default {
+	nextRun,
+	serialize,
+	deserialize,
 }

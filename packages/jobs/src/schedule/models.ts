@@ -1,14 +1,13 @@
-import { schedule } from '@pgqueue/core'
 import { v4 as uuid } from 'uuid'
-
 import type { JobId } from '../models.js'
+import { Schedule } from './cron.js'
 
 export type ScheduledJob<P> = {
 	id: JobId
 	type: string
 	payload: P
 	created: Date
-	schedule: schedule.Schedule
+	schedule: Schedule
 	updated?: Date
 }
 
@@ -19,7 +18,7 @@ export type ScheduledJobOptions = {
 
 export const newSchedule = <P>(
 	name: string,
-	schedule: schedule.Schedule,
+	schedule: Schedule,
 	payload: P,
 	_options?: ScheduledJobOptions
 ): ScheduledJob<P> => ({

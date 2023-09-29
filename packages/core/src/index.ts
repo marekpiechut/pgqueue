@@ -1,5 +1,4 @@
-export * as duration from './duration.js'
 export * as logger from './logger.js'
 export * as psql from './psql.js'
 export * as retry from './retry.js'
-export * as schedule from './schedule.js'
+export * as async from './async.js'

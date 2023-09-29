@@ -1,0 +1,21 @@
+import { logger } from '@pgqueue/core'
+import { Schedule } from './cron'
+import { ScheduledJob, newSchedule } from './models'
+import { ScheduledJobRepository } from './repository'
+
+const log = logger.create('jobs:schedule')
+export class Scheduler {
+	constructor(private repository: ScheduledJobRepository) {}
+
+	public async schedule<P>(
+		type: string,
+		schedule: Schedule,
+		payload: P
+	): Promise<ScheduledJob<P>> {
+		const job = newSchedule(type, schedule, payload)
+		log.debug(`Scheduling job "${type}"`, job)
+		const res = await this.repository.create(job)
+		log.debug(`Job scheduled"${type}"`, res)
+		return res
+	}
+}

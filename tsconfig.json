@@ -1,8 +1,9 @@
 {
 	"references": [
-		{ "path": "./packages/broadcast" },
 		{ "path": "./packages/core" },
+		{ "path": "./packages/broadcast" },
 		{ "path": "./packages/evolutions" },
+		{ "path": "./packages/jobs" },
 		{ "path": "./packages/quickstart" },
 		{ "path": "./packages/cli" },
 		{ "path": "./packages/test-utils" }

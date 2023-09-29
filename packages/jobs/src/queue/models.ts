@@ -1,6 +1,6 @@
-import { duration } from '@pgqueue/core'
 import { v4 as uuid } from 'uuid'
 
+import { Duration } from 'duration.js'
 import type { JobId } from '../models.js'
 
 export type JOB_STATE = Job<unknown, unknown>['state']
@@ -33,16 +33,16 @@ export type ArchivalJob<P, R> = CompletedJob<P, R> | FailedJob<P>
 export type JobOptions = {
 	retries?: number
 	priority?: number
-	delay?: duration.Duration
+	delay?: Duration
 }
 
 export const newJob = <P>(
-	name: string,
+	type: string,
 	payload: P,
 	_options?: JobOptions
 ): PendingJob<P> => ({
 	id: uuid(),
-	type: name,
+	type: type,
 	state: 'PENDING',
 	payload: payload,
 	created: new Date(),

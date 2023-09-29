@@ -4,6 +4,9 @@
 	"description": "Common types and functions for PGQueue libraries",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
+	"directories": {
+		"lib": "lib"
+	},
 	"files": [
 		"lib"
 	],
@@ -18,7 +21,7 @@
 		"node": ">= 18"
 	},
 	"scripts": {
-		"build": "tsc -p",
+		"build": "tsc",
 		"watch": "tsc -w",
 		"clean": "shx rm -rf ./lib",
 		"typecheck": "tsc --noEmit",
@@ -26,8 +29,5 @@
 		"validate": "yarn lint && yarn typecheck"
 	},
 	"type": "module",
-	"private": true,
-	"dependencies": {
-		"cron-parser": "^4.9.0"
-	}
+	"private": true
 }

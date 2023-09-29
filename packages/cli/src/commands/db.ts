@@ -1,4 +1,4 @@
-import queues from '@pgqueue/queues'
+import jobs from '@pgqueue/jobs'
 import { Command } from 'commander'
 import pg from 'pg'
 import { pgConfig } from './utils'
@@ -11,7 +11,7 @@ const evolutions = new Command('evolutions')
 	.option(
 		'-s, --schema <schema>',
 		'Schema to apply evolutions to',
-		queues.DEFAULT_SCHEMA
+		jobs.DEFAULT_SCHEMA
 	)
 	.option(
 		'--destroy-my-data-apply-down',
@@ -30,7 +30,7 @@ const evolutions = new Command('evolutions')
 				destroy_my_data_AllowDownMigration: opts.destroyMyDataApplyDown,
 				schema: opts.schema,
 			}
-			await queues.evolutions.apply(client, options)
+			await jobs.evolutions.apply(client, options)
 		} finally {
 			await client.end()
 		}

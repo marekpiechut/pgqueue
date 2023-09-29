@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { JobId } from '../models.js'
+import { DBConfig, JobId } from '../models.js'
 import { ArchivalJob, Job, PendingJob } from './models.js'
 
 type JsonSerializable = unknown
@@ -42,9 +42,6 @@ const toArchivalJob = <J extends ArchivalJob<unknown, unknown>>(
 	}
 }
 
-type DBConfig = {
-	schema: string
-}
 export class JobRepository {
 	constructor(
 		private client: pg.ClientBase,
