@@ -1,10 +1,17 @@
 import { async, logger } from '@pgqueue/core'
 import pg from 'pg'
-import { QueueManager } from 'queue/manager.js'
-import { JobsRunner } from 'runner.js'
 import { JobHandler } from './models.js'
+import { QueueManager } from './queue/manager.js'
 import { JobOptions, PendingJob } from './queue/models.js'
 import { JobRepository } from './queue/repository.js'
+import { JobsRunner } from './runner.js'
+import { Schedule } from './schedule/cron.js'
+import {
+	ScheduledJob,
+	ScheduledJobOptions,
+	newSchedule,
+} from './schedule/models.js'
+import { ScheduledJobRepository } from './schedule/repository.js'
 import { applyEvolutions } from './schema/index.js'
 
 export const DEFAULT_SCHEMA = 'pgqueues'
@@ -63,6 +70,12 @@ type Queue = {
 		payload: P,
 		options?: JobOptions
 	): Promise<PendingJob<P>>
+	schedule<P>(
+		name: string,
+		schedule: Schedule,
+		payload: P,
+		options?: ScheduledJobOptions
+	): Promise<ScheduledJob<P>>
 }
 export const queue = (client: pg.ClientBase): Queue => {
 	const queueRepository = new JobRepository(client, dbConfig)
@@ -75,19 +88,19 @@ export const queue = (client: pg.ClientBase): Queue => {
 		): Promise<PendingJob<P>> {
 			return queueManager.push(name, payload, options)
 		},
-		// async schedule<P>(
-		// 	name: string,
-		// 	payload: P,
-		// 	schedule: schedule.Schedule,
-		// 	options?: ScheduledJobOptions
-		// ): Promise<PendingJob<P>> {
-		// 	const repository = new JobRepository(client, dbConfig)
-		// 	const job = newJob(name, payload, options)
-		// 	log.debug(`Scheduling job "${name}"`, job)
-		// 	const res = await repository.create(job)
-		// 	log.debug(`Job scheduled "${name}"`, res)
-		// 	return res
-		// },
+		async schedule<P>(
+			name: string,
+			schedule: Schedule,
+			payload: P,
+			options?: ScheduledJobOptions
+		): Promise<ScheduledJob<P>> {
+			const repository = new ScheduledJobRepository(client, dbConfig)
+			const job = newSchedule(name, schedule, payload, options)
+			log.debug(`Scheduling job "${name}"`, job)
+			const res = await repository.create(job)
+			log.debug(`Job scheduled "${name}"`, res)
+			return res
+		},
 	}
 }
 

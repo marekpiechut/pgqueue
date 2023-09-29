@@ -1,6 +1,6 @@
 import { logger } from '@pgqueue/core'
 import pg from 'pg'
-import { JobRepository } from 'queue/repository.js'
+import { JobRepository } from './queue/repository.js'
 import { DBConfig, JobContext, JobHandler } from './models.js'
 import { RunningJob, completeJob, startJob } from './queue/models.js'
 
