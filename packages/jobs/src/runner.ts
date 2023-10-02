@@ -1,8 +1,8 @@
 import { logger } from '@pgqueue/core'
 import pg from 'pg'
-import { JobRepository } from './queue/repository.js'
-import { DBConfig, JobContext, JobHandler } from './models.js'
+import { AppliedConfig, JobContext, JobHandler } from './models.js'
 import { RunningJob, completeJob, startJob } from './queue/models.js'
+import { JobRepository } from './queue/repository.js'
 
 const log = logger.create('jobs:runner')
 
@@ -11,7 +11,7 @@ export class JobsRunner {
 	private handlers: Record<string, JobHandler<any, any>> = {}
 	constructor(
 		private pool: pg.Pool,
-		private dbConfig: DBConfig
+		private config: AppliedConfig
 	) {}
 
 	public addHander<P, R>(name: string, handler: JobHandler<P, R>): void {
@@ -36,7 +36,7 @@ export class JobsRunner {
 		const pool = this.pool
 		const client = await pool.connect()
 		try {
-			const repository = new JobRepository(client, this.dbConfig)
+			const repository = new JobRepository(client, this.config)
 			await client.query('BEGIN')
 			const job = await repository.pop(Object.keys(this.handlers))
 			if (job) {

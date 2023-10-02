@@ -8,11 +8,40 @@ const LEVELS = {
 	none: -1,
 }
 let level = LEVELS.info
+let delegate: LoggerDelegate = {
+	log: (
+		_level: Level,
+		name: string,
+		message: string,
+		...args: unknown[]
+	): void => {
+		console.log(`[${name}] ${message}`, ...args)
+	},
+	error: (
+		error: unknown | null,
+		message?: string,
+		...args: unknown[]
+	): void => {
+		console.error(`[error] ${message}`, error, ...args)
+	},
+}
 
 export const setLevel = (newLevel: Level | null | undefined): void => {
 	level = (newLevel && LEVELS[newLevel]) || LEVELS.info
 }
+export const setDelegate = (newDelegate: LoggerDelegate): void => {
+	delegate = newDelegate
+}
 
+export type LoggerDelegate = {
+	log: (level: Level, name: string, message: string, ...args: unknown[]) => void
+	error: (
+		error: unknown | null,
+		name: string,
+		message?: string,
+		...args: unknown[]
+	) => void
+}
 export type Level = keyof typeof LEVELS
 
 export type Logger = {
@@ -25,17 +54,17 @@ export const create = (name: string): Logger => {
 	return {
 		debug: (message: string, ...args: unknown[]): void => {
 			if (level >= LEVELS.debug) {
-				console.debug(`[${name}] ${message}`, ...args)
+				delegate.log('debug', name, message, ...args)
 			}
 		},
 		info: (message: string, ...args: unknown[]): void => {
 			if (level >= LEVELS.info) {
-				console.info(`[${name}] ${message}`, ...args)
+				delegate.log('info', name, message, ...args)
 			}
 		},
 		warn: (message: string, ...args: unknown[]): void => {
 			if (level >= LEVELS.warn) {
-				console.warn(`[${name}] ${message}`, ...args)
+				delegate.log('warn', name, message, ...args)
 			}
 		},
 		error: (
@@ -44,7 +73,7 @@ export const create = (name: string): Logger => {
 			...args: unknown[]
 		): void => {
 			if (level >= LEVELS.error) {
-				console.error(`[${name}] ${message}`, error, ...args)
+				delegate.error(error, name, message, ...args)
 			}
 		},
 	}

@@ -1,8 +1,11 @@
 import pg from 'pg'
-import { DBConfig, JobId } from '../models.js'
+import { JobId } from '../models.js'
 import cron from './cron'
 import { ScheduledJob } from './models.js'
 
+type Config = {
+	schema: string
+}
 type JsonSerializable = unknown
 type ScheduledJobRow = {
 	id: string
@@ -26,7 +29,7 @@ const toJob = <P>(row: ScheduledJobRow): ScheduledJob<P> => ({
 export class ScheduledJobRepository {
 	constructor(
 		private client: pg.ClientBase,
-		private config: DBConfig
+		private config: Config
 	) {}
 
 	public async create<P>(job: ScheduledJob<P>): Promise<ScheduledJob<P>> {

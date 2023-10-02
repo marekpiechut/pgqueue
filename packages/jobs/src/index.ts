@@ -1,23 +1,23 @@
 import { async, logger } from '@pgqueue/core'
 import pg from 'pg'
-import { JobHandler } from './models.js'
+import { AppliedConfig, DEFAULT_SCHEMA, JobHandler } from './models.js'
 import { QueueManager } from './queue/manager.js'
 import { JobOptions, PendingJob } from './queue/models.js'
 import { JobRepository } from './queue/repository.js'
 import { JobsRunner } from './runner.js'
 import { Schedule } from './schedule/cron.js'
-import {
-	ScheduledJob,
-	ScheduledJobOptions,
-	newSchedule,
-} from './schedule/models.js'
+import { ScheduledJob, ScheduledJobOptions } from './schedule/models.js'
 import { ScheduledJobRepository } from './schedule/repository.js'
+import { Scheduler } from './schedule/scheduler.js'
 import { applyEvolutions } from './schema/index.js'
 
-export const DEFAULT_SCHEMA = 'pgqueues'
 const log = logger.create('jobs')
 
-const dbConfig = { schema: DEFAULT_SCHEMA }
+//TODO: This should be configurable
+const config: AppliedConfig = {
+	schema: DEFAULT_SCHEMA,
+	nodeId: 'node-1',
+}
 type Queues = {
 	on<P, R>(name: string, handler: JobHandler<P, R>): Promise<async.Unsubscribe>
 	off(name: string): Promise<void>
@@ -28,7 +28,7 @@ const fromPool = async (pool: pg.Pool): Promise<Queues> => {
 	const connection = await pool.connect()
 	try {
 		log.info('Checking database schema')
-		await applyEvolutions(dbConfig, connection)
+		await applyEvolutions(config, connection)
 		log.info('Datase schema is up to date, starting queues')
 	} finally {
 		connection.release()
@@ -39,14 +39,14 @@ const fromPool = async (pool: pg.Pool): Promise<Queues> => {
 export const evolutions = {
 	apply: (
 		client: pg.ClientBase,
-		config: { destroy_my_data_AllowDownMigration?: boolean }
+		evoConfig: { destroy_my_data_AllowDownMigration?: boolean }
 	): Promise<void> => {
-		return applyEvolutions({ ...dbConfig, ...config }, client)
+		return applyEvolutions({ ...config, ...evoConfig }, client)
 	},
 }
 
 const queues = (pool: pg.Pool): Queues => {
-	const runner = new JobsRunner(pool, dbConfig)
+	const runner = new JobsRunner(pool, config)
 
 	return {
 		on: async (name, handler) => {
@@ -78,8 +78,11 @@ type Queue = {
 	): Promise<ScheduledJob<P>>
 }
 export const queue = (client: pg.ClientBase): Queue => {
-	const queueRepository = new JobRepository(client, dbConfig)
+	const queueRepository = new JobRepository(client, config)
 	const queueManager = new QueueManager(queueRepository)
+	const scheduleRepository = new ScheduledJobRepository(client, config)
+	const scheduler = new Scheduler(scheduleRepository)
+
 	return {
 		async push<P>(
 			name: string,
@@ -94,12 +97,7 @@ export const queue = (client: pg.ClientBase): Queue => {
 			payload: P,
 			options?: ScheduledJobOptions
 		): Promise<ScheduledJob<P>> {
-			const repository = new ScheduledJobRepository(client, dbConfig)
-			const job = newSchedule(name, schedule, payload, options)
-			log.debug(`Scheduling job "${name}"`, job)
-			const res = await repository.create(job)
-			log.debug(`Job scheduled "${name}"`, res)
-			return res
+			return scheduler.schedule(name, schedule, payload, options)
 		},
 	}
 }
