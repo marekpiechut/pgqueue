@@ -76,8 +76,18 @@ type CronSchedule = {
 	startAt?: Date
 }
 
+export const isFuture = (input: Schedule): boolean => {
+	if (input instanceof Date) {
+		return input.getTime() > Date.now()
+	}
+	//TODO: do we need to validate cron & basic schedule?
+	//it might have a pattern, that has no future runs
+	return true
+}
+
 export default {
 	nextRun,
 	serialize,
 	deserialize,
+	isFuture,
 }

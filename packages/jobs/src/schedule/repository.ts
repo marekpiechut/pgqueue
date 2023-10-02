@@ -10,6 +10,7 @@ type ScheduledJobRow = {
 	created: Date
 	updated?: Date
 	schedule: string
+	timezone?: string
 	payload: JsonSerializable
 }
 const toRow = <P>(job: ScheduledJob<P>): ScheduledJobRow => ({
@@ -33,8 +34,11 @@ export class ScheduledJobRepository {
 		const { schema } = config
 		const row = toRow(job)
 		await client.query(
-			`INSERT INTO ${schema}.SCHEDULE (id, type, created, schedule, payload) VALUES ($1, $2, $3, $4, $5)`,
-			[row.id, row.type, row.created, row.schedule, row.payload]
+			`INSERT INTO ${schema}.SCHEDULE 
+			(id, type, created, schedule, timezone, payload)
+			VALUES
+			($1, $2, $3, $4, $5, $6)`,
+			[row.id, row.type, row.created, row.schedule, row.timezone, row.payload]
 		)
 		return job
 	}

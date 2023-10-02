@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import type { JobId } from '../models.js'
-import { Schedule } from './cron.js'
+import { Schedule, isFuture } from './cron.js'
 
 export type ScheduledJob<P> = {
 	id: JobId
@@ -8,6 +8,7 @@ export type ScheduledJob<P> = {
 	payload: P
 	created: Date
 	schedule: Schedule
+	timezone?: string
 	updated?: Date
 }
 
@@ -21,10 +22,23 @@ export const newSchedule = <P>(
 	schedule: Schedule,
 	payload: P,
 	_options?: ScheduledJobOptions
-): ScheduledJob<P> => ({
-	id: uuid(),
-	type: name,
-	payload: payload,
-	schedule: schedule,
-	created: new Date(),
-})
+): ScheduledJob<P> => {
+	const job = {
+		id: uuid(),
+		type: name,
+		payload: payload,
+		schedule: schedule,
+		timezone: _options?.timezone,
+		created: new Date(),
+	}
+	validate.isFuture(job)
+	return job
+}
+
+const validate = {
+	isFuture: <P>(job: ScheduledJob<P>): void => {
+		if (!isFuture(job.schedule)) {
+			throw new Error(`Schedule is in the past: ${job.schedule}`)
+		}
+	},
+}
