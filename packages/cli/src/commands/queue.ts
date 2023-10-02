@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import jobs from '@pgqueue/jobs'
+import { queues, processors } from '@pgqueue/jobs'
 import { Command } from 'commander'
 import pg from 'pg'
 import { PAYLOAD_FORMAT_HELP, ask, parsePayload, pgConfig } from './utils.js'
@@ -16,7 +16,7 @@ push
 		await client.connect()
 		try {
 			const payload = data?.length ? parsePayload(data) : undefined
-			const queue = await jobs.queue(client)
+			const queue = await queues.create()(client)
 			const job = await queue.push(name, payload)
 			console.log(`Job pushed "${name}"`, job)
 		} finally {
@@ -47,7 +47,7 @@ Enter "yes" to continue.\n`)
 		const opts = push.optsWithGlobals()
 		const pool = new pg.Pool(pgConfig(opts))
 		await pool.connect()
-		const queue = await jobs.fromPool(pool)
+		const queue = await processors.fromPool(pool)
 		const result = data?.length ? parsePayload(data) : undefined
 		console.warn(
 			`Polling queue ${name} ${

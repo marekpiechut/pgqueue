@@ -1,8 +1,8 @@
 import { logger } from '@pgqueue/core'
 import pg from 'pg'
-import { AppliedConfig, JobContext, JobHandler } from './models.js'
-import { RunningJob, completeJob, startJob } from './queue/models.js'
-import { JobRepository } from './queue/repository.js'
+import { AppliedConfig, JobContext, JobHandler } from '../core/index.js'
+import { RunningJob, completeJob, startJob } from '../queue/models.js'
+import { JobRepository } from '../queue/repository.js'
 
 const log = logger.create('jobs:runner')
 
@@ -29,6 +29,7 @@ export class JobsRunner {
 
 	public async start(): Promise<void> {
 		log.info('Starting PGQueue jobs runner')
+		setInterval(() => this.poll(), 1000)
 	}
 
 	async poll(): Promise<void> {

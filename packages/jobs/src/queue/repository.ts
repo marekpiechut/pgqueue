@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { JobId } from '../models.js'
+import { JobId } from '../core/index.js'
 import { ArchivalJob, Job, PendingJob } from './models.js'
 
 type JsonSerializable = unknown

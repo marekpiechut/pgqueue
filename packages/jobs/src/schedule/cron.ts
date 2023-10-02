@@ -1,5 +1,5 @@
 import cron from 'cron-parser'
-import { durations } from '../duration.js'
+import { durations } from './duration.js'
 
 type CronOptions = {
 	tz?: string

@@ -1,7 +1,6 @@
-import { v4 as uuid } from 'uuid'
-
-import { Duration } from 'duration.js'
-import type { JobId } from '../models.js'
+import { Duration } from 'schedule/duration.js'
+import { ids } from '@pgqueue/core'
+import type { JobId } from '../core/index.js'
 
 export type JOB_STATE = Job<unknown, unknown>['state']
 export type JobBase<P> = {
@@ -41,7 +40,7 @@ export const newJob = <P>(
 	payload: P,
 	_options?: JobOptions
 ): PendingJob<P> => ({
-	id: uuid(),
+	id: ids.uuid(),
 	type: type,
 	state: 'PENDING',
 	payload: payload,

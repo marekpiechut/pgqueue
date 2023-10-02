@@ -13,7 +13,7 @@ program
 	.option('-u, --user <username>', 'Postgres user', 'postgres')
 	.option('-w, --pass <password>', 'Postgres password', 'postgres')
 	.option('-d, --db <database>', 'Postgres database', 'postgres')
-	.option('-l --log-level <level>', 'Log level', 'info')
+	.option('-l --log-level <level>', 'Log level', 'error')
 	.hook('preAction', cmd => {
 		const level = cmd.opts().logLevel
 		if (level) {

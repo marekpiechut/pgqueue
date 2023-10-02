@@ -1,17 +1,21 @@
 import pg from 'pg'
 import { logger } from '@pgqueue/core'
-import broadcast, { Broadcaster } from '@pgqueue/broadcast'
+import * as broadcast from '@pgqueue/broadcast'
+import * as jobs from '@pgqueue/jobs'
 
 export type Quickstart = {
-	broadcast: Broadcaster
+	broadcaster: broadcast.Broadcaster
+	processors: jobs.Processors
+	queue: (client: pg.ClientBase) => jobs.Queue
+	evolutions: jobs.Evolutions
 }
 
 export type Config = {
 	logLevel?: logger.Level
-	dbPrefix?: string
+	schema?: string
 }
 
-export const startWithPool = async (
+export const withPool = async (
 	pool: pg.Pool,
 	config?: Config
 ): Promise<Quickstart> => {
@@ -21,14 +25,23 @@ export const startWithPool = async (
 		)
 	}
 
-	const [broadcaster] = await Promise.all([
+	const [broadcaster, processors, queue, evolutions] = await Promise.all([
 		broadcast.fromPool(pool).then(b => {
 			b.start()
 			return b
 		}),
+		jobs.processors.fromPool(pool, config).then(j => {
+			j.start()
+			return j
+		}),
+		jobs.queues.create(config),
+		jobs.evolutions,
 	])
 
 	return {
-		broadcast: broadcaster,
+		evolutions,
+		broadcaster,
+		processors,
+		queue,
 	}
 }

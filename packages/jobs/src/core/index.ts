@@ -1,4 +1,9 @@
-import { Duration } from './duration.js'
+import { ids } from '@pgqueue/core'
+import { Duration } from '../schedule/duration.js'
+
+const randomNodeId = (): string => {
+	return ids.uuid()
+}
 
 export type UUID = string
 export type JobId = UUID
@@ -31,7 +36,7 @@ export type Config = {
 	 * Without this, tasks will not be automatically unlocked on restart
 	 * and will have to wait until lock timeout expires.
 	 */
-	nodeId: string
+	nodeId?: string
 }
 
 export type AppliedConfig = Config & typeof DEFAULT_CONFIG
@@ -39,4 +44,5 @@ export type AppliedConfig = Config & typeof DEFAULT_CONFIG
 export const DEFAULT_SCHEMA = 'pgqueues'
 export const DEFAULT_CONFIG = {
 	schema: DEFAULT_SCHEMA,
+	nodeId: randomNodeId(),
 }

@@ -7,15 +7,17 @@ const LEVELS = {
 	error: 10,
 	none: -1,
 }
-let level = LEVELS.info
+let level = LEVELS.error
 let delegate: LoggerDelegate = {
 	log: (
-		_level: Level,
+		level: Level,
 		name: string,
 		message: string,
 		...args: unknown[]
 	): void => {
-		console.log(`[${name}] ${message}`, ...args)
+		if (level !== 'none') {
+			console[level](`[${name}] ${message}`, ...args)
+		}
 	},
 	error: (
 		error: unknown | null,

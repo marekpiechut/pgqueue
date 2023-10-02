@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import jobs from '@pgqueue/jobs'
+import { queues } from '@pgqueue/jobs'
 import { Command, Option } from 'commander'
 import pg from 'pg'
 import { PAYLOAD_FORMAT_HELP, parsePayload, pgConfig } from './utils.js'
@@ -40,7 +40,7 @@ schedule
 		await client.connect()
 		try {
 			const payload = data?.length ? parsePayload(data) : undefined
-			const queue = await jobs.queue(client)
+			const queue = await queues.create({})(client)
 			const job = await queue.schedule(name, parsedSchedule, payload)
 			console.log(`Job scheduled "${name}"`, job)
 		} finally {

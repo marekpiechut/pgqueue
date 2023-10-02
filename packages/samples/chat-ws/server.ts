@@ -1,6 +1,6 @@
 import * as pgqueue from '@pgqueue/pgqueue'
+import { id } from '@pgqueue/core'
 import pg from 'pg'
-import { v4 as uuidgen } from 'uuid'
 import { WebSocketServer } from 'ws'
 
 const PORTS = [8080, 8081]
@@ -79,7 +79,7 @@ const start = async (port: number): Promise<void> => {
 
 	ws.on('error', e => console.error(port, e))
 	ws.on('connection', socket => {
-		const id = uuidgen()
+		const id = id.uuidgen()
 		console.log(port, 'Client connected', id)
 
 		users[id] = { id }
