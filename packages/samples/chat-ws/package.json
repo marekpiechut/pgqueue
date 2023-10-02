@@ -23,7 +23,6 @@
 	"dependencies": {
 		"@pgqueue/broadcast": "^",
 		"pg": "^8.11.3",
-		"uuid": "^9.0.1",
 		"ws": "^8.14.1"
 	}
 }
