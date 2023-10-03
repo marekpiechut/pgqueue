@@ -1,5 +1,5 @@
 import pg from 'pg'
-import { logger, retry, psql } from '@pgqueue/core'
+import { logger, retry, psql, errors } from '@pgqueue/core'
 
 const log = logger.create('broadcaster')
 
@@ -159,7 +159,7 @@ export const fromClient = (
 					}
 				} catch (e) {
 					log.error('Error parsing event', msg.channel, e, msg)
-					const error = e instanceof Error ? e : new Error(String(e))
+					const error = errors.toError(e)
 					config?.onError?.(error)
 					return
 				}
@@ -169,7 +169,7 @@ export const fromClient = (
 						listener(event)
 					} catch (e) {
 						log.error('Error in broadcast listener', msg.channel, e)
-						const error = e instanceof Error ? e : new Error(String(e))
+						const error = errors.toError(e)
 						config?.onError?.(error)
 					}
 				})
