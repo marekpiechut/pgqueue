@@ -7,7 +7,7 @@ const LEVELS = {
 	error: 10,
 	none: -1,
 }
-let level = LEVELS.error
+let level = LEVELS.warn
 let delegate: LoggerDelegate = {
 	log: (
 		level: Level,

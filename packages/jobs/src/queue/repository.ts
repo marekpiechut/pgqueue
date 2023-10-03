@@ -1,6 +1,12 @@
 import pg from 'pg'
-import { JobId } from '../core/index.js'
-import { ArchivalJob, Job, PendingJob } from './models.js'
+import { AppliedConfig, JobId } from '../core/index.js'
+import {
+	ActiveJob,
+	ArchivalJob,
+	Job,
+	PendingJob,
+	RunningJob,
+} from './models.js'
 
 type JsonSerializable = unknown
 type JobRow = {
@@ -42,13 +48,10 @@ const toArchivalJob = <J extends ArchivalJob<unknown, unknown>>(
 	}
 }
 
-type Config = {
-	schema: string
-}
 export class JobRepository {
 	constructor(
 		private client: pg.ClientBase,
-		private config: Config
+		private config: AppliedConfig
 	) {}
 
 	public async create<P>(job: PendingJob<P>): Promise<PendingJob<P>> {
@@ -62,7 +65,7 @@ export class JobRepository {
 		return job
 	}
 
-	public async update<J extends Job<unknown, unknown>>(job: J): Promise<J> {
+	public async update<J extends ActiveJob<unknown>>(job: J): Promise<J> {
 		const { client, config } = this
 		const { schema } = config
 		const row = toRow(job)
@@ -88,20 +91,53 @@ export class JobRepository {
 		return res.rowCount
 	}
 
-	public async pop<P>(types: string[]): Promise<PendingJob<P> | undefined> {
+	public async pop<P>(types: string[]): Promise<RunningJob<P> | undefined>
+	public async pop<P>(
+		types: string[],
+		batchSize: number
+	): Promise<RunningJob<P>[]>
+	public async pop<P>(
+		types: string[],
+		batchSize?: number
+	): Promise<RunningJob<P> | RunningJob<P>[] | undefined> {
 		const { client, config } = this
-		const { schema } = config
+		const { schema, nodeId } = config
+
 		const { rows } = await client.query<JobRow>(
-			`SELECT * FROM ${schema}.QUEUE 
-					WHERE type=ANY($1) AND state='PENDING' 
-					ORDER BY created, id ASC LIMIT 1
-					FOR UPDATE SKIP LOCKED
-				`,
-			[types]
+			`WITH next AS (
+				SELECT *
+				FROM ${client.escapeIdentifier(schema)}.QUEUE
+				WHERE type = ANY($1)
+					AND state = 'PENDING'
+					AND (
+						lock_key IS NULL
+						OR lock_timeout < now()
+					)
+				ORDER BY priority, created, id ASC
+				LIMIT $3 FOR
+				UPDATE SKIP LOCKED
+			)
+			UPDATE ${client.escapeIdentifier(schema)}.QUEUE as updated
+			SET lock_key = $2,
+				state = 'RUNNING',
+				version = next.version + 1,
+				tries = next.tries + 1,
+				started = now(),
+				updated = now(),
+				lock_timeout = now() + INTERVAL '15 minutes'
+			FROM next
+			WHERE updated.id = next.id
+			RETURNING updated.*
+			`,
+			[types, nodeId, batchSize ?? 1]
 		)
-		if (rows.length === 0) return undefined
-		const row = rows[0]
-		return toJob(row) as PendingJob<P>
+		if (batchSize) {
+			return rows.map(toJob) as RunningJob<P>[]
+		} else {
+			if (rows.length === 0) return undefined
+			const row = rows[0]
+			return toJob(row) as RunningJob<P>
+		}
 	}
 
 	public async archive<J extends ArchivalJob<unknown, unknown>>(

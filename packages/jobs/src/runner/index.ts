@@ -1,7 +1,7 @@
-import { logger } from '@pgqueue/core'
+import { errors, logger, psql } from '@pgqueue/core'
 import pg from 'pg'
 import { AppliedConfig, JobContext, JobHandler } from '../core/index.js'
-import { RunningJob, completeJob, startJob } from '../queue/models.js'
+import { RunningJob, completeJob, failJob } from '../queue/models.js'
 import { JobRepository } from '../queue/repository.js'
 
 const log = logger.create('jobs:runner')
@@ -35,43 +35,36 @@ export class JobsRunner {
 	async poll(): Promise<void> {
 		log.debug('Polling for jobs')
 		const pool = this.pool
-		const client = await pool.connect()
-		try {
+		await psql.withClient(pool, async client => {
 			const repository = new JobRepository(client, this.config)
-			await client.query('BEGIN')
-			const job = await repository.pop(Object.keys(this.handlers))
+			const job = await psql.withTx(client, async () =>
+				repository.pop(Object.keys(this.handlers))
+			)
+
 			if (job) {
 				const handler = this.handlers[job.type]
 				if (handler) {
+					const context = this.createContext(job)
 					try {
-						const startedJob = await repository.update(startJob(job))
-						const context = this.createContext(startedJob)
-						try {
-							const res = await handler(startedJob, context)
+						const res = await handler(job, context)
 
-							await repository.delete(startedJob.id)
-							const completedJob = await repository.archive(
-								completeJob(startedJob, res)
-							)
-							log.debug('Job processed', completedJob)
-						} catch (err) {
-							log.error(err, 'Error while processing job')
-							//TODO: store error and update attempts
-							//move to job history if attempts > max
-							throw err
-						}
+						const completedJob = await psql.withTx(client, async () => {
+							await repository.delete(job.id)
+							return repository.archive(completeJob(job, res))
+						})
+						log.debug('Job processed', completedJob)
 					} catch (err) {
-						log.error(err, 'Failed to start acquired job', job)
+						log.error(err, 'Error while processing job')
+						await psql.withTx(client, async () => {
+							const error = errors.toError(err)
+							//TODO: move to job history if attempts > max
+							return repository.update(failJob(job, error))
+						})
 						throw err
 					}
 				}
 			}
-			await client.query('COMMIT')
-		} catch (err) {
-			await client.query('ROLLBACK')
-		} finally {
-			await client.release()
-		}
+		})
 	}
 
 	private createContext<P>(_job: RunningJob<P>): JobContext<P> {

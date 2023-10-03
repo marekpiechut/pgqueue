@@ -11,13 +11,17 @@ export default (config: Config): Evolution => ({
 		`CREATE TABLE ${config.schema}.QUEUE (
 			id UUID NOT NULL,
 			key VARCHAR(64) UNIQUE DEFAULT NULL,
+			lock_key VARCHAR(64) DEFAULT NULL,
+			lock_timeout TIMESTAMP DEFAULT NULL,
+			version INTEGER NOT NULL DEFAULT 0,
+			tries INTEGER NOT NULL DEFAULT 0,
 			type VARCHAR(64) NOT NULL,
 			created TIMESTAMP NOT NULL,
 			updated TIMESTAMP,
+			started TIMESTAMP,
 			state VARCHAR(16) NOT NULL,
 			run_after TIMESTAMP,
 			priority INTEGER,
-			tries INTEGER,
 			payload JSONB,
 			error TEXT,
 			PRIMARY KEY(id)

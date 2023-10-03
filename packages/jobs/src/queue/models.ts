@@ -26,8 +26,9 @@ export type FailedJob<P> = JobBase<P> & {
 	error: Error
 	updated: Date
 }
-export type Job<P, R> = PendingJob<P> | RunningJob<P> | CompletedJob<P, R>
+export type ActiveJob<P> = PendingJob<P> | RunningJob<P> | FailedJob<P>
 export type ArchivalJob<P, R> = CompletedJob<P, R> | FailedJob<P>
+export type Job<P, R> = ActiveJob<P> | ArchivalJob<P, R>
 
 export type JobOptions = {
 	retries?: number
@@ -70,6 +71,18 @@ export const completeJob = <P, R>(
 		...job,
 		state: 'COMPLETED',
 		result: result,
+		updated: new Date(),
+	}
+}
+
+export const failJob = <P>(job: RunningJob<P>, error: Error): FailedJob<P> => {
+	if (job.state !== 'RUNNING') {
+		throw new Error(`Cannot fail job in ${job.state} state: ${job.id}`)
+	}
+	return {
+		...job,
+		state: 'FAILED',
+		error: error,
 		updated: new Date(),
 	}
 }
