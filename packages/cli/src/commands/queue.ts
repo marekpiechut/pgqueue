@@ -8,16 +8,21 @@ import { PAYLOAD_FORMAT_HELP, ask, parsePayload, pgConfig } from './utils.js'
 export const push = new Command('push')
 push
 	.description('Push a job to queue')
+	.option(
+		'--priority <number>',
+		'job priority, lower value means higher priority',
+		parseInt
+	)
 	.argument('name', 'job name')
 	.argument('payload...', `job payload - ${PAYLOAD_FORMAT_HELP}`)
 	.action(async (name, data) => {
-		const opts = push.optsWithGlobals()
-		const client = new pg.Client(pgConfig(opts))
+		const opts = push.opts()
+		const client = new pg.Client(pgConfig(push.optsWithGlobals()))
 		await client.connect()
 		try {
 			const payload = data?.length ? parsePayload(data) : undefined
 			const queue = await queues.create()(client)
-			const job = await queue.push(name, payload)
+			const job = await queue.push(name, payload, { priority: opts.priority })
 			console.log(`Job pushed "${name}"`, job)
 		} finally {
 			await client.end()

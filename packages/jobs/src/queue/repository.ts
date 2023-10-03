@@ -15,6 +15,7 @@ type JobRow = {
 	created: Date
 	updated?: Date
 	state: string
+	priority?: number
 	payload: JsonSerializable
 }
 const toRow = <P, R>(job: Job<P, R>): JobRow => job
@@ -59,8 +60,8 @@ export class JobRepository {
 		const { schema } = config
 		const row = toRow(job)
 		await client.query(
-			`INSERT INTO ${schema}.QUEUE (id, type, created, state, payload) VALUES ($1, $2, $3, $4, $5)`,
-			[row.id, row.type, row.created, row.state, row.payload]
+			`INSERT INTO ${schema}.QUEUE (id, type, created, state, priority, payload) VALUES ($1, $2, $3, $4, $5, $6)`,
+			[row.id, row.type, row.created, row.state, row.priority, row.payload]
 		)
 		return job
 	}
@@ -103,6 +104,7 @@ export class JobRepository {
 		const { client, config } = this
 		const { schema, nodeId } = config
 
+		//TODO: this should handle priority by type, not globally
 		const { rows } = await client.query<JobRow>(
 			`WITH next AS (
 				SELECT *
@@ -113,7 +115,7 @@ export class JobRepository {
 						lock_key IS NULL
 						OR lock_timeout < now()
 					)
-				ORDER BY priority, created, id ASC
+				ORDER BY priority NULLS LAST, created, id ASC
 				LIMIT $3 FOR
 				UPDATE SKIP LOCKED
 			)

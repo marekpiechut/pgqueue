@@ -7,6 +7,7 @@ export type JobBase<P> = {
 	id: JobId
 	type: string
 	payload: P
+	priority?: number
 	created: Date
 }
 export type PendingJob<P> = JobBase<P> & {
@@ -39,12 +40,13 @@ export type JobOptions = {
 export const newJob = <P>(
 	type: string,
 	payload: P,
-	_options?: JobOptions
+	options?: JobOptions
 ): PendingJob<P> => ({
 	id: ids.uuid(),
 	type: type,
 	state: 'PENDING',
 	payload: payload,
+	priority: options?.priority,
 	created: new Date(),
 })
 
