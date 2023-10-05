@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { logger } from '@pgqueue/core'
 import { program } from 'commander'
-import { db } from 'commands/db.js'
+import { db } from './commands/db.js'
 import { emit, listen } from './commands/broadcast.js'
 import { poll, push } from './commands/queue.js'
-import { schedule } from 'commands/schedule.js'
+import { schedule } from './commands/schedule.js'
 
 program
 	.name('pgqueue')

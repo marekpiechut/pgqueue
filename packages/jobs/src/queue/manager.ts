@@ -1,6 +1,6 @@
 import { logger } from '@pgqueue/core'
-import { JobOptions, PendingJob, newJob } from './models'
-import { JobRepository } from './repository'
+import { JobOptions, PendingJob, newJob } from './models.js'
+import { JobRepository } from './repository.js'
 
 const log = logger.create('jobs:queue')
 export class QueueManager {

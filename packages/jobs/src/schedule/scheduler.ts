@@ -1,7 +1,7 @@
 import { logger } from '@pgqueue/core'
-import { Schedule } from './cron'
-import { ScheduledJob, ScheduledJobOptions, newSchedule } from './models'
-import { ScheduledJobRepository } from './repository'
+import { Schedule } from './cron.js'
+import { ScheduledJob, ScheduledJobOptions, newSchedule } from './models.js'
+import { ScheduledJobRepository } from './repository.js'
 
 const log = logger.create('jobs:schedule')
 export class Scheduler {

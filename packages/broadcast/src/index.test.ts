@@ -1,7 +1,7 @@
 import { assert, async } from '@pgqueue/test-utils'
 import pg from 'pg'
 import sinon from 'sinon'
-import * as broadcaster from './index'
+import * as broadcaster from './index.js'
 
 describe('broadcaster', async () => {
 	describe('start/stop', () => {

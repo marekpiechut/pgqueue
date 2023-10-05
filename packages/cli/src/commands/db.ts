@@ -1,7 +1,7 @@
 import jobs from '@pgqueue/jobs'
 import { Command } from 'commander'
 import pg from 'pg'
-import { pgConfig } from './utils'
+import { pgConfig } from './utils.js'
 
 export const db = new Command('db').description(
 	'Utilities to manage the database'

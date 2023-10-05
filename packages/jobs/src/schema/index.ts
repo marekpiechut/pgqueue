@@ -5,7 +5,7 @@ import pg from 'pg'
  * ALL EVOLUTIONS                  *
  * NEVER REMOVE OR CHANGE ORDER!!! *
  ***********************************/
-const EVOLUTIONS = ['./versions/v1.sql']
+const EVOLUTIONS = ['./versions/v1.sql.js']
 /***********************************
  * ALL EVOLUTIONS END              *
  ***********************************/

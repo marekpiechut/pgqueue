@@ -1,6 +1,6 @@
 import pg from 'pg'
 import { JobId } from '../core/index.js'
-import cron from './cron'
+import cron from './cron.js'
 import { ScheduledJob } from './models.js'
 
 type Config = {
