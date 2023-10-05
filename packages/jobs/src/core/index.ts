@@ -41,7 +41,7 @@ export type Config = {
 
 export type AppliedConfig = Config & typeof DEFAULT_CONFIG
 
-export const DEFAULT_SCHEMA = 'pgqueues'
+export const DEFAULT_SCHEMA = 'pgqueue'
 export const DEFAULT_CONFIG = {
 	schema: DEFAULT_SCHEMA,
 	nodeId: randomNodeId(),

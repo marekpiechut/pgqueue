@@ -18,7 +18,7 @@ const listen = async amount => {
 			conn
 				.connect()
 				.then(() =>
-					conn.query(`select pgqueues.subscribe($1, $2)`, ['test' + i, events])
+					conn.query(`select pgqueue.subscribe($1, $2)`, ['test' + i, events])
 				)
 		)
 	}
@@ -31,7 +31,7 @@ const emit = async delay => {
 	let i = 0
 	conn.connect()
 	setInterval(() => {
-		conn.query(`select pgqueues.push($1, NULL, NULL, NULL)`, [
+		conn.query(`select pgqueue.push($1, NULL, NULL, NULL)`, [
 			events[i % events.length],
 		])
 		i++

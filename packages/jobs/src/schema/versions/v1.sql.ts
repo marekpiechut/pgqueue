@@ -132,6 +132,40 @@ export default (config: Config): Evolution => ({
 			RETURN row;
 			END;
 		$$ LANGUAGE plpgsql;`,
+
+		`CREATE OR REPLACE FUNCTION ${config.schema}.POLL
+		(types VARCHAR[], nodeId VARCHAR, batchSize INTEGER default 1)
+		RETURNS SETOF ${config.schema}.QUEUE AS $$
+
+		
+		BEGIN
+			RETURN QUERY WITH next AS (
+				SELECT *
+				FROM ${config.schema}.QUEUE
+				WHERE type = ANY(types)
+					AND state = 'PENDING'
+					AND (
+						lock_key IS NULL
+						OR lock_timeout < now()
+					)
+				ORDER BY priority NULLS LAST, created, id ASC
+				LIMIT batchSize FOR
+				UPDATE SKIP LOCKED
+			)
+			UPDATE ${config.schema}.QUEUE as updated
+			SET lock_key = nodeId,
+				state = 'RUNNING',
+				version = next.version + 1,
+				tries = next.tries + 1,
+				started = now(),
+				updated = now(),
+				lock_timeout = now() + INTERVAL '15 minutes'
+			FROM next
+			WHERE updated.id = next.id
+			RETURNING updated.*;
+		END;
+		
+		$$ LANGUAGE plpgsql;`,
 		// -- TRIGGERS -- //
 		`CREATE OR REPLACE FUNCTION ${config.schema}.QUEUE_ADDED() RETURNS trigger AS $$
 			DECLARE
