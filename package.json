@@ -20,6 +20,7 @@
 		"watch": "lerna run watch --parallel",
 		"clean": "lerna run clean",
 		"validate": "lerna run validate",
+		"typecheck": "lerna run typecheck",
 		"test": "lerna run test",
 		"it": "tsx --test --experimental-test-coverage test/**",
 		"prepare": "husky install"

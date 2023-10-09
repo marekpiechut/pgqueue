@@ -5,7 +5,7 @@ import pg from 'pg'
  * ALL EVOLUTIONS                  *
  * NEVER REMOVE OR CHANGE ORDER!!! *
  ***********************************/
-const EVOLUTIONS = ['./versions/v1.sql.js']
+const EVOLUTIONS = ['./v1.sql.js']
 /***********************************
  * ALL EVOLUTIONS END              *
  ***********************************/
@@ -29,4 +29,8 @@ const validateConfig = (config: Config): void => {
 	if (!config.schema) {
 		throw Error('Database schema is required')
 	}
+}
+
+export default {
+	applyEvolutions,
 }

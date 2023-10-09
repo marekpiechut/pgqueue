@@ -1,9 +1,9 @@
 import pg from 'pg'
-import { AppliedConfig, JobId } from '../core/index.js'
 import {
 	ActiveJob,
 	ArchivalJob,
 	Job,
+	JobId,
 	PendingJob,
 	RunningJob,
 } from './models.js'
@@ -49,10 +49,14 @@ const toArchivalJob = <J extends ArchivalJob<unknown, unknown>>(
 	}
 }
 
+type Config = {
+	schema: string
+	nodeId: string
+}
 export class JobRepository {
 	constructor(
 		private client: pg.ClientBase,
-		private config: AppliedConfig
+		private config: Config
 	) {}
 
 	public async create<P>(job: PendingJob<P>): Promise<PendingJob<P>> {
@@ -92,15 +96,10 @@ export class JobRepository {
 		return res.rowCount
 	}
 
-	public async pop<P>(types: string[]): Promise<RunningJob<P> | undefined>
-	public async pop<P>(
+	public async poll<P>(
 		types: string[],
-		batchSize: number
-	): Promise<RunningJob<P>[]>
-	public async pop<P>(
-		types: string[],
-		batchSize?: number
-	): Promise<RunningJob<P> | RunningJob<P>[] | undefined> {
+		batchSize: number = 1
+	): Promise<RunningJob<P>[]> {
 		const { client, config } = this
 		const { schema, nodeId } = config
 
@@ -131,15 +130,29 @@ export class JobRepository {
 			WHERE updated.id = next.id
 			RETURNING updated.*
 			`,
-			[types, nodeId, batchSize ?? 1]
+			[types, nodeId, batchSize]
 		)
-		if (batchSize) {
-			return rows.map(toJob) as RunningJob<P>[]
-		} else {
-			if (rows.length === 0) return undefined
-			const row = rows[0]
-			return toJob(row) as RunningJob<P>
-		}
+		return rows.map(toJob) as RunningJob<P>[]
+	}
+
+	public async restartAll(): Promise<number> {
+		const { client, config } = this
+		const { schema } = config
+		const res = await client.query(
+			`UPDATE ${schema}.QUEUE SET
+			 lock_key=NULL,
+			 lock_timeout=NULL,
+			 version=version+1,
+			 tries=tries+1,
+			 state='PENDING',
+			 updated=now(),
+			 started=NULL,
+			 error='Restarted on node restart'
+			 WHERE state='RUNNING'
+			 AND lock_key=$1`,
+			[config.nodeId]
+		)
+		return res.rowCount
 	}
 
 	public async archive<J extends ArchivalJob<unknown, unknown>>(

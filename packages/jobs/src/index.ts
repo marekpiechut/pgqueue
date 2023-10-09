@@ -1,15 +1,26 @@
-import { DEFAULT_SCHEMA } from './core/index.js'
+import pg from 'pg'
+import { PGQueue } from './queue/index.js'
+import * as schema from './schema/index.js'
 
-import evolutions, { Evolutions } from './evolutions.js'
-import processors, { Processors } from './processors.js'
-import queues, { Queue } from './queues.js'
+const DEFAULT_SCHEMA = 'pgqueue'
+export const DEFAULT_CONFIG = {
+	schema: DEFAULT_SCHEMA,
+	pollInterval: 30000,
+	runMaintenance: true,
+}
 
-export { DEFAULT_SCHEMA, evolutions, processors, queues }
-export type { Processors, Queue, Evolutions }
+export const evolutions = {
+	apply: (
+		client: pg.ClientBase,
+		config?: Partial<schema.Config>
+	): Promise<void> => {
+		return schema.applyEvolutions({ ...DEFAULT_CONFIG, ...config }, client)
+	},
+}
 
+export { DEFAULT_SCHEMA, PGQueue }
 export default {
 	DEFAULT_SCHEMA,
-	queues,
+	PGQueue,
 	evolutions,
-	processors,
 }

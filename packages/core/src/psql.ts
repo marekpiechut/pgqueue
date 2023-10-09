@@ -1,9 +1,75 @@
 import pg from 'pg'
+import * as logger from './logger.js'
 
 export type ClientFactory = {
-	acquire: () => Promise<pg.Client | pg.PoolClient>
-	release: (client: pg.Client | pg.PoolClient) => Promise<void>
+	acquire: () => Promise<pg.ClientBase>
+	persistent: (config?: {
+		onConnect: (newClient: pg.ClientBase) => unknown
+	}) => Promise<pg.ClientBase>
+	release: (client: pg.ClientBase) => Promise<void>
+	withClient: (
+		fn: (client: pg.ClientBase) => Promise<unknown>
+	) => Promise<unknown>
 }
+
+const log = logger.create('core:psql')
+
+export const poolConnectionFactory = (pool: pg.Pool): ClientFactory => {
+	let persistent: pg.PoolClient | undefined
+	let persistentConnections: number = 0
+
+	return {
+		acquire: async () => {
+			return pool.connect()
+		},
+		release: async client => {
+			if (client === persistent && --persistentConnections <= 0) {
+				log.info('Releasing persistent client')
+				persistent.release()
+				persistent = undefined
+			} else if ((client as pg.PoolClient).release) {
+				return (client as pg.PoolClient).release()
+			} else {
+				throw new Error('Cannot release client not from the pool')
+			}
+		},
+		withClient(fn) {
+			return pool.connect().then(client => {
+				return fn(client).finally(() => client.release())
+			})
+		},
+		persistent: async config => {
+			if (!persistent) {
+				persistent = await pool.connect()
+				config?.onConnect?.(persistent)
+				persistent.on('error', async err => {
+					log.error(err, 'Error from persistent client, restarting connection')
+					persistent?.release()
+					persistent = await pool.connect()
+					config?.onConnect?.(persistent)
+				})
+			}
+			persistentConnections++
+			return persistent
+		},
+	}
+}
+
+export const singleConnectionFactory = (client: pg.Client): ClientFactory => ({
+	acquire: async () => {
+		return client
+	},
+	release: async () => {
+		return client.end()
+	},
+	withClient: fn => {
+		return fn(client)
+	},
+	persistent: async () => {
+		//Just return the same client, there's nothing we can do to make it persistent
+		return client
+	},
+})
 
 export type QueryArgs = ReadonlyArray<
 	| boolean

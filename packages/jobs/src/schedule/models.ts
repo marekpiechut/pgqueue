@@ -1,9 +1,9 @@
 import { ids } from '@pgqueue/core'
-import type { JobId } from '../core/index.js'
 import { Schedule, isFuture } from './cron.js'
 
+export type ScheduleId = string
 export type ScheduledJob<P> = {
-	id: JobId
+	id: ScheduleId
 	type: string
 	payload: P
 	created: Date

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { queues, processors } from '@pgqueue/jobs'
-import { Command } from 'commander'
+import { PGQueue } from '@pgqueue/jobs'
+import { Command, Option } from 'commander'
+import chalk from 'chalk'
 import pg from 'pg'
 import { PAYLOAD_FORMAT_HELP, ask, parsePayload, pgConfig } from './utils.js'
 
@@ -13,17 +14,21 @@ push
 		'job priority, lower value means higher priority',
 		parseInt
 	)
-	.argument('name', 'job name')
+	.argument('type', 'job type')
 	.argument('payload...', `job payload - ${PAYLOAD_FORMAT_HELP}`)
-	.action(async (name, data) => {
+	.action(async (type, data) => {
 		const opts = push.opts()
 		const client = new pg.Client(pgConfig(push.optsWithGlobals()))
 		await client.connect()
 		try {
 			const payload = data?.length ? parsePayload(data) : undefined
-			const queue = await queues.create()(client)
-			const job = await queue.push(name, payload, { priority: opts.priority })
-			console.log(`Job pushed "${name}"`, job)
+			const queue = PGQueue.fromClient(client, {})
+			const job = await queue.push(client, {
+				type,
+				payload,
+				priority: opts.priority,
+			})
+			console.log(`Job pushed "${chalk.green(type)}"`, job)
 		} finally {
 			await client.end()
 		}
@@ -32,12 +37,21 @@ push
 export const poll = new Command('poll')
 poll
 	.description('Listen to queue and consume jobs.')
+	.addOption(
+		new Option('--output <format>', 'Output format')
+			.default('json')
+			.choices(['short', 'json'])
+	)
+	.option('-y --yes', 'Skip confirmation')
 	.argument('name', 'job name')
 	.argument('[result...]', `job result - ${PAYLOAD_FORMAT_HELP}`)
 	.action(async (name, data) => {
-		if (!poll.opts().yes) {
+		const opts = poll.optsWithGlobals()
+		if (!opts.yes) {
 			const answer = await ask(`
-WARNING: You are about to start polling the queue "${name}".
+${chalk.red('WARNING')}: You are about to start polling the queue "${chalk.bold(
+				name
+			)}".
 This will consume jobs from the queue and process them.
 Jobs captured by this process will not be available for other consumers.
 If you just want to watch the queue without altering it's contents, use the "peek" command instead.
@@ -49,23 +63,31 @@ Enter "yes" to continue.\n`)
 			}
 		}
 
-		const opts = push.optsWithGlobals()
 		const pool = new pg.Pool(pgConfig(opts))
 		await pool.connect()
-		const queue = await processors.fromPool(pool)
+		const queue = PGQueue.fromPool(pool, {})
 		const result = data?.length ? parsePayload(data) : undefined
 		console.warn(
-			`Polling queue ${name} ${
+			`Subscribed to queue "${chalk.bold(name)}" ${
 				result ? 'with result: \n' + JSON.stringify(result, null, 2) + '\n' : ''
-			}(THIS WILL CONSUME JOBS !!!)`
+			}${chalk.red('THIS WILL CONSUME JOBS !!!')}`
 		)
-		queue.on(name, async job => {
-			console.log(`Job consumed: "${name}"`, job)
+		const formatter =
+			JOB_FORMATTERS[opts.output as keyof typeof JOB_FORMATTERS] ||
+			JOB_FORMATTERS.json
+		let count = 0
+		queue.addHandler(name, async job => {
+			console.log(formatter(++count, job))
 			return result
 		})
 		queue.start()
 	})
 
+const JOB_FORMATTERS = {
+	short: (count: number, job: { id: string }) =>
+		`Job ${count} processed: ${chalk.green(job.id)}`,
+	json: (_count: number, job: unknown) => JSON.stringify(job, null, 2),
+}
 // export const peek = new Command('peek')
 // peek
 // 	.description('Listen to queue and peek at jobs.')

@@ -14,7 +14,7 @@ export default (config: Config): Evolution => ({
 			nodeId VARCHAR(64) NOT NULL,
 			type VARCHAR(64) NOT NULL,
 			pid INTEGER NOT NULL,
-			PRIMARY KEY(pid, type)
+			PRIMARY KEY(nodeId, type)
 		)`,
 		`CREATE TABLE ${config.schema}.QUEUE (
 			id UUID NOT NULL,
@@ -82,27 +82,26 @@ export default (config: Config): Evolution => ({
 				INSERT INTO ${config.schema}.LISTENERS (nodeId, type, pid)
 				SELECT nodeId, type, pg_backend_pid()
 				FROM unnest(types) AS type
-				ON CONFLICT DO NOTHING;
+				ON CONFLICT ON CONSTRAINT listeners_pkey DO UPDATE SET
+				pid = EXCLUDED.pid;
 
-				EXECUTE 'LISTEN ' || quote_ident(format('pgqueue:listener:%s:%s', nodeId, pg_backend_pid()));
-
+				EXECUTE 'LISTEN ' || quote_ident('pgqueue:job:added:' || nodeId);
 				RETURN cardinality(types);
 				END;
 			$$ LANGUAGE plpgsql;
 		`,
 		`CREATE OR REPLACE FUNCTION
-		${config.schema}.UNSUBSCRIBE(id VARCHAR, types VARCHAR[]) RETURNS BOOLEAN AS $$
+		${config.schema}.UNSUBSCRIBE(nodeId VARCHAR, types VARCHAR[]) RETURNS BOOLEAN AS $$
 			BEGIN
 
 			IF cardinality(types) = 0 OR types IS NULL THEN
-				DELETE FROM ${config.schema}.LISTENERS WHERE nodeId = id OR pid = pg_backend_pid();
+				DELETE FROM ${config.schema}.LISTENERS WHERE nodeId = nodeId OR pid = pg_backend_pid();
 			ELSE
 				DELETE FROM ${config.schema}.LISTENERS WHERE
-				(nodeId = id OR pid = pg_backend_pid()) AND type = ANY(types);
+				(nodeId = nodeId OR pid = pg_backend_pid()) AND type = ANY(types);
 			END IF;
 
-			EXECUTE 'UNLISTEN ' || quote_ident(format('pgqueue:listener:%s:%s', nodeId, pg_backend_pid()));
-
+			EXECUTE 'UNLISTEN ' || quote_ident('pgqueue:job:added:' || nodeId);
 			RETURN FOUND;
 			END;
 		$$ LANGUAGE plpgsql;
@@ -110,62 +109,7 @@ export default (config: Config): Evolution => ({
 		`CREATE OR REPLACE PROCEDURE ${config.schema}.CLEAR_ORPHANED_LISTENERS() AS $$
 			DELETE FROM ${config.schema}.LISTENERS WHERE pid NOT IN ( SELECT pid FROM pg_stat_activity);			
 		$$ LANGUAGE sql;`,
-		// -- QUEUE FUNCTIONS -- //
-		`CREATE OR REPLACE FUNCTION
-			${config.schema}.PUSH(type VARCHAR, payload JSON, priority INTEGER, key VARCHAR)
-			RETURNS ${config.schema}.QUEUE AS $$
-			DECLARE
-				row ${config.schema}.QUEUE%rowtype;
-			BEGIN
 
-			INSERT INTO ${config.schema}.QUEUE
-				(id, type, created, priority, key, payload, state)
-			VALUES
-				(gen_random_uuid(), type, now(), priority, key, payload, 'PENDING')
-			ON CONFLICT ON CONSTRAINT QUEUE_key_key DO UPDATE SET
-				updated		=	now(),
-				priority	=	EXCLUDED.priority,
-				payload		=	EXCLUDED.payload,
-				version		=	QUEUE.version + 1
-			RETURNING * INTO row;
-
-			RETURN row;
-			END;
-		$$ LANGUAGE plpgsql;`,
-
-		`CREATE OR REPLACE FUNCTION ${config.schema}.POLL
-		(types VARCHAR[], nodeId VARCHAR, batchSize INTEGER default 1)
-		RETURNS SETOF ${config.schema}.QUEUE AS $$
-
-		
-		BEGIN
-			RETURN QUERY WITH next AS (
-				SELECT *
-				FROM ${config.schema}.QUEUE
-				WHERE type = ANY(types)
-					AND state = 'PENDING'
-					AND (
-						lock_key IS NULL
-						OR lock_timeout < now()
-					)
-				ORDER BY priority NULLS LAST, created, id ASC
-				LIMIT batchSize FOR
-				UPDATE SKIP LOCKED
-			)
-			UPDATE ${config.schema}.QUEUE as updated
-			SET lock_key = nodeId,
-				state = 'RUNNING',
-				version = next.version + 1,
-				tries = next.tries + 1,
-				started = now(),
-				updated = now(),
-				lock_timeout = now() + INTERVAL '15 minutes'
-			FROM next
-			WHERE updated.id = next.id
-			RETURNING updated.*;
-		END;
-		
-		$$ LANGUAGE plpgsql;`,
 		// -- TRIGGERS -- //
 		`CREATE OR REPLACE FUNCTION ${config.schema}.QUEUE_ADDED() RETURNS trigger AS $$
 			DECLARE
@@ -175,16 +119,15 @@ export default (config: Config): Evolution => ({
 			BEGIN
 				CALL ${config.schema}.CLEAR_ORPHANED_LISTENERS();
 				OPEN cursor FOR SELECT * FROM ${config.schema}.LISTENERS WHERE type = NEW.type;
-
+raise warning 'QUEUE_ADDED: %s', NEW.type;
 				MOVE FORWARD ALL FROM cursor;
 				GET DIAGNOSTICS items = ROW_COUNT;
-				raise notice 'Items: %', items;
 
 				IF items > 0 THEN
 					items := floor(random() * items);
 					MOVE ABSOLUTE (items) FROM cursor; 
 					FETCH cursor INTO row;
-					EXECUTE 'NOTIFY ' || quote_ident(format('pgqueue:listener:%s:%s', row.nodeId, row.pid)) || ', ' || quote_literal(NEW.type);
+					EXECUTE 'NOTIFY ' || quote_ident('pgqueue:job:added:' || row.nodeId) || ', ' || quote_literal(NEW.type);
 				END IF;
 				
 				CLOSE cursor;
@@ -193,34 +136,20 @@ export default (config: Config): Evolution => ({
 			$$ LANGUAGE plpgsql;
 		`,
 		`CREATE OR REPLACE TRIGGER TR_QUEUE_ADDED
-			AFTER INSERT OR UPDATE ON ${config.schema}.QUEUE
+			AFTER INSERT ON ${config.schema}.QUEUE
 			FOR EACH ROW EXECUTE PROCEDURE
 			${config.schema}.QUEUE_ADDED();
 		`,
-		`CREATE OR REPLACE FUNCTION ${config.schema}.SCHEDULE_ADDED() RETURNS trigger AS $$
-			BEGIN
-				PERFORM pg_notify('pgqueue:schedule:added', NEW.type);
-				RETURN NEW;
-			END;
-			$$ LANGUAGE plpgsql;
-		`,
-		`CREATE OR REPLACE TRIGGER TR_SCHEDULE_ADDED
-			AFTER INSERT ON ${config.schema}.SCHEDULE
-			FOR EACH ROW EXECUTE PROCEDURE
-			${config.schema}.SCHEDULE_ADDED();
-		`,
 	],
 	downs: [
-		`DROP FUNCTION ${config.schema}.PUSH`,
-		`DROP FUNCTION ${config.schema}.SUBSCRIBE`,
-		`DROP FUNCTION ${config.schema}.UNSUBSCRIBE`,
 		`DROP TABLE ${config.schema}.LISTENERS`,
 		`DROP TABLE ${config.schema}.QUEUE`,
 		`DROP TABLE ${config.schema}.QUEUE_HISTORY`,
-		`DROP FUNCTION ${config.schema}.QUEUE_ADDED`,
 		`DROP TABLE ${config.schema}.SCHEDULE`,
 		`DROP TABLE ${config.schema}.SCHEDULE_RUNS`,
-		`DROP FUNCTION ${config.schema}.SCHEDULE_ADDED`,
+		`DROP FUNCTION ${config.schema}.SUBSCRIBE`,
+		`DROP FUNCTION ${config.schema}.UNSUBSCRIBE`,
+		`DROP FUNCTION ${config.schema}.QUEUE_ADDED`,
 		`DROP TYPE ${config.schema}.JOB_STATE`,
 	],
 })

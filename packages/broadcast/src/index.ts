@@ -59,6 +59,7 @@ export type Broadcaster = {
 	 *
 	 * @param event Event to emit, make sure it is **JSON serializable**.
 	 */
+	off: <P>(type: string, listener: BroadcastListener<P>) => Promise<void>
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	emit: Emitter<any>
 	/**
@@ -84,7 +85,9 @@ export type Broadcaster = {
 	shutdown: () => Promise<void>
 }
 
-const EVENT_BASE = 'pgqueue:broadcast'
+type PrivateBroadcaster = Broadcaster & {
+	setClient: (client: pg.ClientBase) => void
+}
 
 export type BroadcasterConfig = {
 	/**
@@ -131,17 +134,17 @@ export type BroadcasterConfig = {
  * @param client PG client **must not** be from the pool, and has to be connected. You are responsible for closing it after shutdown.
  */
 export const fromClient = (
-	client: pg.Client | pg.PoolClient,
+	client: pg.ClientBase,
 	config?: BroadcasterConfig
-): Broadcaster & { setClient: (client: pg.Client | pg.PoolClient) => void } => {
+): PrivateBroadcaster => {
 	//eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const listeners: Record<string, BroadcastListener<any>[]> = {}
 
-	return {
+	const instance: PrivateBroadcaster = {
 		start: async (): Promise<void> => {
 			log.info('Starting broadcaster')
 			client.on('notification', async msg => {
-				const type = msg.channel.substring(EVENT_BASE.length + 1)
+				const type = msg.channel
 				const eventListeners = listeners[type]
 				if (!eventListeners?.length) return
 
@@ -177,9 +180,7 @@ export const fromClient = (
 
 			for (const type in listeners) {
 				log.debug('Listening for events:', type)
-				await client.query(
-					`LISTEN ${client.escapeIdentifier(EVENT_BASE + ':' + type)}`
-				)
+				await client.query(`LISTEN ${client.escapeIdentifier(type)}`)
 			}
 		},
 		on: async (type, listener): Promise<Unsubscribe> => {
@@ -187,18 +188,16 @@ export const fromClient = (
 				listeners[type].push(listener)
 			} else {
 				listeners[type] = [listener]
-				await client.query(
-					`LISTEN ${client.escapeIdentifier(EVENT_BASE + ':' + type)}`
-				)
+				await client.query(`LISTEN ${client.escapeIdentifier(type)}`)
 			}
-			return async () => {
-				listeners[type] = listeners[type].filter(l => l !== listener)
-				if (listeners[type].length === 0) {
-					await client.query(
-						`UNLISTEN ${client.escapeIdentifier(EVENT_BASE + ':' + type)}`
-					)
-					delete listeners[type]
-				}
+
+			return () => instance.off(type, listener)
+		},
+		off: async (type, listener): Promise<void> => {
+			listeners[type] = listeners[type].filter(l => l !== listener)
+			if (listeners[type].length === 0) {
+				await client.query(`UNLISTEN ${client.escapeIdentifier(type)}`)
+				delete listeners[type]
 			}
 		},
 		emit: <P>(type: string, payload: P) => emit(client, type, payload),
@@ -217,6 +216,8 @@ export const fromClient = (
 			log.info('Broadcaster shutdown complete')
 		},
 	}
+
+	return instance
 }
 
 /**
@@ -237,7 +238,7 @@ export const fromPool = async (
 	pool: pg.Pool,
 	config?: BroadcasterConfig
 ): Promise<Broadcaster> => {
-	return fromFactory(poolConnectionFactory(pool), config)
+	return fromFactory(psql.poolConnectionFactory(pool), config)
 }
 
 export const fromFactory = async (
@@ -276,7 +277,7 @@ export const fromFactory = async (
 		setTimeout(reconnect, waitTime)
 	}
 
-	let client: pg.Client | pg.PoolClient = await factory.acquire()
+	let client: pg.ClientBase = await factory.acquire()
 	const instance = fromClient(client, config)
 	client.on('error', handleError)
 
@@ -294,33 +295,19 @@ export const fromFactory = async (
 }
 
 const emit = async <P>(
-	client: pg.Client | pg.PoolClient,
+	client: pg.ClientBase,
 	type: string,
 	payload: P
 ): Promise<void> => {
-	const id = EVENT_BASE + ':' + type
 	const msg: MsgV1<P> = {
 		created: Date.now(),
 		payload: payload,
 	}
 	const json = JSON.stringify(msg)
 	await client.query(
-		`NOTIFY ${client.escapeIdentifier(id)}, ${client.escapeLiteral(json)}`
+		`NOTIFY ${client.escapeIdentifier(type)}, ${client.escapeLiteral(json)}`
 	)
 }
-
-const poolConnectionFactory = (pool: pg.Pool): psql.ClientFactory => ({
-	acquire: async (): Promise<pg.Client | pg.PoolClient> => {
-		return pool.connect()
-	},
-	release: async (client: pg.Client | pg.PoolClient): Promise<void> => {
-		if ((client as pg.PoolClient).release) {
-			return (client as pg.PoolClient).release()
-		} else {
-			throw new Error('Cannot release client not from the pool')
-		}
-	},
-})
 
 export default {
 	fromClient,

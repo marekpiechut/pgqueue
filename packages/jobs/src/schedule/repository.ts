@@ -1,7 +1,6 @@
 import pg from 'pg'
-import { JobId } from '../core/index.js'
 import cron from './cron.js'
-import { ScheduledJob } from './models.js'
+import { ScheduleId, ScheduledJob } from './models.js'
 
 type Config = {
 	schema: string
@@ -46,7 +45,7 @@ export class ScheduledJobRepository {
 		return job
 	}
 
-	public async delete(id: JobId): Promise<number> {
+	public async delete(id: ScheduleId): Promise<number> {
 		const { client, config } = this
 		const { schema } = config
 		const res = await client.query(
@@ -56,7 +55,7 @@ export class ScheduledJobRepository {
 		return res.rowCount
 	}
 
-	public async fetch<P>(id: JobId): Promise<ScheduledJob<P> | undefined> {
+	public async fetch<P>(id: ScheduleId): Promise<ScheduledJob<P> | undefined> {
 		const { client, config } = this
 		const { schema } = config
 		const res = await client.query(
