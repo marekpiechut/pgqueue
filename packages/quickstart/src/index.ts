@@ -3,7 +3,7 @@ import { logger, psql } from '@pgqueue/core'
 import { PGQueue } from '@pgqueue/jobs'
 import pg from 'pg'
 
-const log = logger.create('quickstart')
+// const log = logger.create('quickstart')
 
 export type { Broadcaster, PGQueue }
 export type Quickstart = {
@@ -23,31 +23,6 @@ const configureLogger = (config?: Config): void => {
 	logger.setLevel(
 		config?.logLevel || (process.env.PGQUEUE_LOG_LEVEL as logger.Level)
 	)
-}
-
-export const justQueue = async (
-	pgConfig: pg.ClientConfig,
-	config?: Config
-): Promise<PGQueue> => {
-	configureLogger(config)
-
-	const pool = new pg.Pool(pgConfig)
-	const persistentConnection = new psql.SharedPersistentConnection(pool)
-	const connectionFactory = psql.poolConnectionFactory(pool)
-
-	return new PGQueue(connectionFactory, persistentConnection, config)
-}
-
-export const justBroadcast = async (
-	pgConfig: pg.ClientConfig,
-	config?: Config
-): Promise<Broadcaster> => {
-	configureLogger(config)
-
-	const pool = new pg.Pool(pgConfig)
-	const persistentConnection = new psql.SharedPersistentConnection(pool)
-
-	return new Broadcaster(persistentConnection)
 }
 
 export const withPool = async (
@@ -77,29 +52,28 @@ export const withPool = async (
 	}
 }
 
-//TODO: add global instances for super simple usage
-//make sure users can setup all listeners before starting
-//right now it's not possible, as all the constructors
-//require a connection to be passed in
-let global: Quickstart
+// //TODO: add global instances for super simple usage
+// //make sure users can setup all listeners before starting
+// //right now it's not possible, as all the constructors
+// //require a connection to be passed in
+// export const
+// export const start = async (
+// 	config?: Config & pg.ClientConfig
+// ): Promise<Quickstart> => {
+// 	configureLogger(config)
+// 	if (global) {
+// 		log.warn('Global instance already started, restarting to reconfigure')
+// 		await global.stop()
+// 	}
 
-export const start = async (
-	config?: Config & pg.ClientConfig
-): Promise<Quickstart> => {
-	configureLogger(config)
-	if (global) {
-		log.warn('Global instance already started, restarting to reconfigure')
-		await global.stop()
-	}
+// 	const pool = config?.pool || new pg.Pool(config)
+// 	global = await withPool(pool, config)
 
-	const pool = config?.pool || new pg.Pool(config)
-	global = await withPool(pool, config)
+// 	await global.start()
+// 	return global
+// }
 
-	await global.start()
-	return global
-}
-
-export const stop = async (): Promise<void> => {
-	if (!global) return
-	await global.stop()
-}
+// export const stop = async (): Promise<void> => {
+// 	if (!global) return
+// 	await global.stop()
+// }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { justQueue } from '@pgqueue/quickstart'
+import jobs from '@pgqueue/jobs'
 import { Command, Option } from 'commander'
 import chalk from 'chalk'
 import pg from 'pg'
@@ -22,7 +22,7 @@ push
 		await client.connect()
 		try {
 			const payload = data?.length ? parsePayload(data) : undefined
-			const queue = await justQueue(pgConfig(opts))
+			const queue = await jobs.quickstart(pgConfig(opts))
 			const job = await queue.push(client, {
 				type,
 				payload,
@@ -63,7 +63,7 @@ Enter "yes" to continue.\n`)
 			}
 		}
 
-		const queue = await justQueue(pgConfig(opts))
+		const queue = await jobs.quickstart(pgConfig(opts))
 		const result = data?.length ? parsePayload(data) : undefined
 		console.warn(
 			`Subscribed to queue "${chalk.bold(name)}" ${

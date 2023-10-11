@@ -173,13 +173,24 @@ export const publish = async <P>(
 		`NOTIFY ${client.escapeIdentifier(type)}, ${client.escapeLiteral(json)}`
 	)
 }
-export const withClient =
+export const withTx =
 	(client: pg.ClientBase) =>
 	<P>(type: string, payload: P): Promise<void> =>
 		publish(client, type, payload)
 
+export const quickstart = async (
+	configOrPool?: pg.PoolConfig | pg.Pool
+): Promise<Broadcaster> => {
+	const pool =
+		configOrPool instanceof pg.Pool ? configOrPool : new pg.Pool(configOrPool)
+	const persistentConnection = new psql.SharedPersistentConnection(pool)
+
+	return new Broadcaster(persistentConnection)
+}
+
 export default {
 	Broadcaster,
+	quickstart,
 	publish,
-	withClient,
+	withTx,
 }

@@ -1,8 +1,6 @@
 import chalk from 'chalk'
 import { Command, Option } from 'commander'
 import pg from 'pg'
-import { justBroadcast } from '@pgqueue/quickstart'
-//TODO: this should be using some quickstart api
 import broadcast from '@pgqueue/broadcast'
 import { PAYLOAD_FORMAT_HELP, parsePayload, pgConfig } from './utils.js'
 
@@ -17,7 +15,7 @@ listen
 	)
 	.action(async channel => {
 		const opts = listen.optsWithGlobals()
-		const broadcaster = await justBroadcast(pgConfig(opts))
+		const broadcaster = await broadcast.quickstart(pgConfig(opts))
 		const formatter =
 			EVENT_FORMATTERS[opts.format as keyof typeof EVENT_FORMATTERS] ||
 			EVENT_FORMATTERS.json
