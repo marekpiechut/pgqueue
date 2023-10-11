@@ -52,7 +52,7 @@ export const apply = async (
 		log.info('Schema created')
 	}
 
-	if (await actions.hasDown()) {
+	if (hasSchema && (await actions.hasDown())) {
 		if (config.destroy_my_data_AllowDownMigration) {
 			log.warn(
 				`!!! WARNING !!! Database has down migrations. This will DESTROY YOUR DATA! You have 10 seconds to cancel if you're not sure...`
@@ -192,7 +192,7 @@ class EvolutionActions {
 				downs: row.downs,
 			}
 		} else {
-			log.warn('No version in schema. Assuming no data.')
+			log.warn(`No version in schema ${this.config.schema}. Assuming no data.`)
 			return null
 		}
 	}

@@ -94,7 +94,6 @@ export default (config: Config): Evolution => ({
 			BEGIN
 				CALL ${config.schema}.CLEAR_ORPHANED_LISTENERS();
 				OPEN cursor FOR SELECT * FROM ${config.schema}.LISTENERS WHERE type = NEW.type;
-raise warning 'QUEUE_ADDED: %s', NEW.type;
 				MOVE FORWARD ALL FROM cursor;
 				GET DIAGNOSTICS items = ROW_COUNT;
 
@@ -102,7 +101,7 @@ raise warning 'QUEUE_ADDED: %s', NEW.type;
 					items := floor(random() * items);
 					MOVE ABSOLUTE (items) FROM cursor; 
 					FETCH cursor INTO row;
-					EXECUTE 'NOTIFY ' || quote_ident('pgqueue:job:added:' || row.nodeId) || ', ' || quote_literal(NEW.type);
+					PERFORM pg_notify('pgqueue:job:added:' || row.nodeId, NEW.type);
 				END IF;
 				
 				CLOSE cursor;

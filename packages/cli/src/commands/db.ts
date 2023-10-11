@@ -1,4 +1,5 @@
 import queue from '@pgqueue/queue'
+import schedule from '@pgqueue/schedule'
 import { Command } from 'commander'
 import pg from 'pg'
 import { pgConfig } from './utils.js'
@@ -9,9 +10,14 @@ export const db = new Command('db').description(
 
 const evolutions = new Command('evolutions')
 	.option(
-		'-s, --schema <schema>',
-		'Schema to apply evolutions to',
+		'--queue-schema <schema>',
+		'Database schema for queues',
 		queue.DEFAULT_SCHEMA
+	)
+	.option(
+		'--schedule-schema <schema>',
+		'Database schema for schedules',
+		schedule.DEFAULT_SCHEMA
 	)
 	.option(
 		'--destroy-my-data-apply-down',
@@ -20,17 +26,22 @@ const evolutions = new Command('evolutions')
 	.description('Run database evolutions')
 	.action(async () => {
 		const opts = evolutions.opts()
-		console.log(`Running database evolutions on schema ${opts.schema}`)
+		console.log(
+			`Running database evolutions on schemas: ${opts.queueSchema}, ${opts.scheduleSchema}`
+		)
 
 		const client = new pg.Client(pgConfig(evolutions.optsWithGlobals()))
 		await client.connect()
 
 		try {
-			const options = {
+			await queue.evolutions.apply(client, {
 				destroy_my_data_AllowDownMigration: opts.destroyMyDataApplyDown,
-				schema: opts.schema,
-			}
-			await queue.evolutions.apply(client, options)
+				schema: opts.queueSchema,
+			})
+			await schedule.evolutions.apply(client, {
+				destroy_my_data_AllowDownMigration: opts.destroyMyDataApplyDown,
+				schema: opts.scheduleSchema,
+			})
 		} finally {
 			await client.end()
 		}
