@@ -1,13 +1,13 @@
 {
-	"name": "@pgqueue/jobs",
+	"name": "@pgqueue/queue",
 	"version": "1.0.0",
-	"description": "Queues and scheduled jobs for PostgreSQL",
+	"description": "Queues and delayed jobs for PostgreSQL",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
 	"files": [
 		"lib"
 	],
-	"repository": "https://github.com/marekpiechut/pgqueue/packages/jobs",
+	"repository": "https://github.com/marekpiechut/pgqueue/packages/queue",
 	"author": {
 		"email": "marek@dayone.pl",
 		"name": "Marek Piechut",

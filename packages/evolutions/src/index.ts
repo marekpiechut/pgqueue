@@ -40,7 +40,7 @@ export const apply = async (
 	client: pg.ClientBase,
 	config: Config
 ): Promise<void> => {
-	log.info('Applying evolutions')
+	log.info(`Applying evolutions into ${config.schema} schema`)
 	const loaded = await loadEvolutions(schema)
 	const configWithDefaults = { ...CONFIG_DEFAULTS, ...config }
 	const actions = new EvolutionActions(client, configWithDefaults, loaded)

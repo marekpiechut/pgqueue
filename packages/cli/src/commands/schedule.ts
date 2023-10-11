@@ -1,6 +1,6 @@
 // #!/usr/bin/env node
 
-// import { queues } from '@pgqueue/jobs'
+// import { queues } from '@pgqueue/queue'
 // import { Command, Option } from 'commander'
 // import pg from 'pg'
 // import { PAYLOAD_FORMAT_HELP, parsePayload, pgConfig } from './utils.js'

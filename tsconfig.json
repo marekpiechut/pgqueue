@@ -3,7 +3,8 @@
 		{ "path": "./packages/core" },
 		{ "path": "./packages/broadcast" },
 		{ "path": "./packages/evolutions" },
-		{ "path": "./packages/jobs" },
+		{ "path": "./packages/queue" },
+		{ "path": "./packages/schedule" },
 		{ "path": "./packages/quickstart" },
 		{ "path": "./packages/cli" },
 		{ "path": "./packages/test-utils" }

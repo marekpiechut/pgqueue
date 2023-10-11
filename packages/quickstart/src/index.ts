@@ -1,14 +1,14 @@
 import { Broadcaster } from '@pgqueue/broadcast'
 import { logger, psql } from '@pgqueue/core'
-import { PGQueue } from '@pgqueue/jobs'
+import { Queue } from '@pgqueue/queue'
 import pg from 'pg'
 
 // const log = logger.create('quickstart')
 
-export type { Broadcaster, PGQueue }
+export type { Broadcaster, Queue }
 export type Quickstart = {
 	broadcaster: Broadcaster
-	queue: PGQueue
+	queue: Queue
 	start: () => Promise<void>
 	stop: () => Promise<void>
 }
@@ -34,7 +34,7 @@ export const withPool = async (
 	const persistentConnection = new psql.SharedPersistentConnection(pool)
 	const connectionFactory = psql.poolConnectionFactory(pool)
 	const broadcaster = new Broadcaster(persistentConnection)
-	const queue = new PGQueue(connectionFactory, persistentConnection, config)
+	const queue = new Queue(connectionFactory, persistentConnection, config)
 
 	const start = async (): Promise<void> => {
 		await Promise.all([queue.start(), broadcaster.start()])

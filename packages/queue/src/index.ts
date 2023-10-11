@@ -1,7 +1,6 @@
 import { collections, errors, ids, logger, psql } from '@pgqueue/core'
 import EventEmitter from 'events'
 import pg from 'pg'
-import schema from '../schema/index.js'
 import {
 	JobContext,
 	JobHandler,
@@ -13,9 +12,10 @@ import {
 	newJob,
 } from './models.js'
 import { JobRepository } from './repository.js'
+import * as schema from './schema/index.js'
 
 const log = logger.create('jobs:queue')
-
+const DEFAULT_SCHEMA = 'queues'
 type Config = {
 	schema?: string
 	nodeId?: string
@@ -24,12 +24,12 @@ type Config = {
 }
 
 const DEFAULT_CONFIG = {
-	schema: 'pgqueue',
+	schema: DEFAULT_SCHEMA,
 	nodeId: ids.uuid(),
 	pollInterval: 30000,
 	runMaintenance: true,
 }
-export class PGQueue extends EventEmitter {
+class Queue extends EventEmitter {
 	private clientFactory: psql.ClientFactory
 	private persistentConnection: psql.SharedPersistentConnection
 	private config: Config & typeof DEFAULT_CONFIG
@@ -52,6 +52,7 @@ export class PGQueue extends EventEmitter {
 	}
 
 	public async start(): Promise<void> {
+		log.info('Starting queue with config', this.config)
 		if (this.started) {
 			throw new Error('Queue already started')
 		}
@@ -67,12 +68,6 @@ export class PGQueue extends EventEmitter {
 
 		this.started = true
 		this.emit('started')
-	}
-
-	private async onConnection(client: pg.ClientBase): Promise<void> {
-		client.on('notification', this.onEvent)
-		this.subscribe(...this.handlers.keys())
-		this.poll()
 	}
 
 	public async stop(force?: boolean): Promise<void> {
@@ -119,7 +114,7 @@ export class PGQueue extends EventEmitter {
 		type: string,
 		handler: JobHandler<P, R>
 	): Promise<void> {
-		if (this.handlers.set(type, handler)) {
+		if (this.handlers.set(type, handler) && this.started) {
 			await this.subscribe(type)
 		}
 	}
@@ -128,10 +123,16 @@ export class PGQueue extends EventEmitter {
 		type: string,
 		handler: JobHandler<P, R>
 	): Promise<void> {
-		if (this.handlers.delete(type, handler)) {
+		if (this.handlers.delete(type, handler) && this.started) {
 			await this.unsubscribe(type)
 		}
 	}
+
+	private onConnection = (async (client: pg.ClientBase): Promise<void> => {
+		client.on('notification', this.onEvent)
+		this.subscribe(...this.handlers.keys())
+		this.poll()
+	}).bind(this)
 
 	private onEvent = ((event: pg.Notification): void => {
 		const { channel, payload } = event
@@ -231,4 +232,30 @@ export class PGQueue extends EventEmitter {
 			[nodeId, types]
 		)
 	}
+}
+
+const evolutions = {
+	apply: (client: pg.ClientBase, config?: schema.Config): Promise<void> => {
+		return schema.applyEvolutions({ schema: DEFAULT_SCHEMA, ...config }, client)
+	},
+}
+
+const quickstart = async (
+	poolOrConfig: pg.PoolConfig | pg.Pool,
+	config?: Config
+): Promise<Queue> => {
+	const pool =
+		poolOrConfig instanceof pg.Pool ? poolOrConfig : new pg.Pool(poolOrConfig)
+	const persistentConnection = new psql.SharedPersistentConnection(pool)
+	const connectionFactory = psql.poolConnectionFactory(pool)
+
+	return new Queue(connectionFactory, persistentConnection, config)
+}
+
+export { DEFAULT_SCHEMA, Queue, evolutions, quickstart }
+export default {
+	DEFAULT_SCHEMA,
+	Queue,
+	quickstart,
+	evolutions,
 }

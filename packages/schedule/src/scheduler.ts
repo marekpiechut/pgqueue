@@ -3,7 +3,7 @@ import { Schedule } from './cron.js'
 import { ScheduledJob, ScheduledJobOptions, newSchedule } from './models.js'
 import { ScheduledJobRepository } from './repository.js'
 
-const log = logger.create('jobs:schedule')
+const log = logger.create('schedule')
 export class Scheduler {
 	constructor(private repository: ScheduledJobRepository) {}
 
