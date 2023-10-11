@@ -31,28 +31,30 @@ const DEFAULT_CONFIG = {
 }
 export class PGQueue extends EventEmitter {
 	private clientFactory: psql.ClientFactory
-	private client: pg.ClientBase | undefined
+	private persistentConnection: psql.SharedPersistentConnection
 	private config: Config & typeof DEFAULT_CONFIG
 	private channelKey: string
+	private started = false
 	private run: Promise<unknown> | undefined
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	private handlers = new collections.Multimap<string, JobHandler<any, any>>()
 
-	constructor(config: Config, clientFactory: psql.ClientFactory) {
+	constructor(
+		clientFactory: psql.ClientFactory,
+		persistentConnection: psql.SharedPersistentConnection,
+		config?: Config
+	) {
 		super()
 		this.config = { ...DEFAULT_CONFIG, ...config }
 		this.clientFactory = clientFactory
+		this.persistentConnection = persistentConnection
 		this.channelKey = `pgqueue:job:added:${this.config.nodeId}`
 	}
 
-	public static fromPool(pool: pg.Pool, config: Config): PGQueue {
-		return new PGQueue(config, psql.poolConnectionFactory(pool))
-	}
-	public static fromClient(client: pg.Client, config: Config): PGQueue {
-		return new PGQueue(config, psql.singleConnectionFactory(client))
-	}
-
 	public async start(): Promise<void> {
+		if (this.started) {
+			throw new Error('Queue already started')
+		}
 		log.info('Starting queue listener')
 		await this.clientFactory.withClient(client =>
 			schema.applyEvolutions(this.config, client)
@@ -61,15 +63,16 @@ export class PGQueue extends EventEmitter {
 			const repository = new JobRepository(client, this.config)
 			return repository.restartAll()
 		})
-		await this.clientFactory.persistent({
-			onConnect: client => {
-				this.client = client
-				this.client.on('notification', this.onEvent)
-				this.subscribe(...this.handlers.keys())
-				this.poll()
-			},
-		})
+		await this.persistentConnection.acquire(this.onConnection)
+
+		this.started = true
 		this.emit('started')
+	}
+
+	private async onConnection(client: pg.ClientBase): Promise<void> {
+		client.on('notification', this.onEvent)
+		this.subscribe(...this.handlers.keys())
+		this.poll()
 	}
 
 	public async stop(force?: boolean): Promise<void> {
@@ -78,18 +81,17 @@ export class PGQueue extends EventEmitter {
 			await this.run
 		}
 
-		if (this.client) {
-			try {
-				await this.unsubscribe(...this.handlers.keys())
-				this.client.off('notification', this.onEvent)
-			} catch (err) {
-				this.emit('error', err)
-				if (!force) throw err
-			}
-			await this.clientFactory.release(this.client)
-			this.client = undefined
+		try {
+			await this.unsubscribe(...this.handlers.keys())
+			const client = await this.persistentConnection.getClient()
+			client.off('notification', this.onEvent)
+		} catch (err) {
+			this.emit('error', err)
+			if (!force) throw err
 		}
+		await this.persistentConnection.release(this.onConnection)
 
+		this.started = false
 		this.emit('stopped')
 	}
 
@@ -105,7 +107,7 @@ export class PGQueue extends EventEmitter {
 		return res
 	}
 
-	public withClient(client: pg.ClientBase): {
+	public withTx(client: pg.ClientBase): {
 		push: <P>(item: JobWithOptions<P>) => Promise<PendingJob<P>>
 	} {
 		return {
@@ -117,7 +119,7 @@ export class PGQueue extends EventEmitter {
 		type: string,
 		handler: JobHandler<P, R>
 	): Promise<void> {
-		if (this.handlers.set(type, handler) && this.client) {
+		if (this.handlers.set(type, handler)) {
 			await this.subscribe(type)
 		}
 	}
@@ -126,7 +128,7 @@ export class PGQueue extends EventEmitter {
 		type: string,
 		handler: JobHandler<P, R>
 	): Promise<void> {
-		if (this.handlers.delete(type, handler) && this.client) {
+		if (this.handlers.delete(type, handler)) {
 			await this.unsubscribe(type)
 		}
 	}
@@ -212,7 +214,7 @@ export class PGQueue extends EventEmitter {
 
 	private async subscribe(...types: string[]): Promise<void> {
 		log.debug('Subscribing to job types', types)
-		const client = await this.clientFactory.persistent()
+		const client = await this.persistentConnection.getClient()
 		const { schema, nodeId } = this.config
 		await client.query(
 			`SELECT ${client.escapeIdentifier(schema)}.SUBSCRIBE($1, $2)`,
@@ -221,7 +223,8 @@ export class PGQueue extends EventEmitter {
 	}
 
 	private async unsubscribe(...types: string[]): Promise<void> {
-		const client = await this.clientFactory.persistent()
+		log.debug('Unsubscribing from job types', types)
+		const client = await this.persistentConnection.getClient()
 		const { schema, nodeId } = this.config
 		await client.query(
 			`SELECT ${client.escapeIdentifier(schema)}.UNSUBSCRIBE($1, $2)`,

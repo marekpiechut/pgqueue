@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { PGQueue } from '@pgqueue/jobs'
+import { justQueue } from '@pgqueue/quickstart'
 import { Command, Option } from 'commander'
 import chalk from 'chalk'
 import pg from 'pg'
@@ -22,7 +22,7 @@ push
 		await client.connect()
 		try {
 			const payload = data?.length ? parsePayload(data) : undefined
-			const queue = PGQueue.fromClient(client, {})
+			const queue = await justQueue(pgConfig(opts))
 			const job = await queue.push(client, {
 				type,
 				payload,
@@ -38,7 +38,7 @@ export const poll = new Command('poll')
 poll
 	.description('Listen to queue and consume jobs.')
 	.addOption(
-		new Option('--output <format>', 'Output format')
+		new Option('--format <format>', 'Output format')
 			.default('json')
 			.choices(['short', 'json'])
 	)
@@ -63,9 +63,7 @@ Enter "yes" to continue.\n`)
 			}
 		}
 
-		const pool = new pg.Pool(pgConfig(opts))
-		await pool.connect()
-		const queue = PGQueue.fromPool(pool, {})
+		const queue = await justQueue(pgConfig(opts))
 		const result = data?.length ? parsePayload(data) : undefined
 		console.warn(
 			`Subscribed to queue "${chalk.bold(name)}" ${
@@ -73,7 +71,7 @@ Enter "yes" to continue.\n`)
 			}${chalk.red('THIS WILL CONSUME JOBS !!!')}`
 		)
 		const formatter =
-			JOB_FORMATTERS[opts.output as keyof typeof JOB_FORMATTERS] ||
+			JOB_FORMATTERS[opts.format as keyof typeof JOB_FORMATTERS] ||
 			JOB_FORMATTERS.json
 		let count = 0
 		queue.addHandler(name, async job => {

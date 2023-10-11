@@ -1,5 +1,5 @@
 import cron from 'cron-parser'
-import { durations } from './duration.js'
+import { duration } from '@pgqueue/core'
 
 type CronOptions = {
 	tz?: string
@@ -13,7 +13,7 @@ export const nextRun = (input: Schedule, options: CronOptions): Date => {
 	} else if (input.type === 'basic') {
 		return new Date(
 			(input.startAt?.getTime() ?? Date.now()) +
-				durations[input.interval](input.every)
+				duration.durations[input.interval](input.every)
 		)
 	} else if (input.type === 'cron') {
 		return cron.parseExpression(input.cron, options).next().toDate()

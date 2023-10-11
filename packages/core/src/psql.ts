@@ -1,15 +1,12 @@
 import pg from 'pg'
+import { formatDuration, seconds } from './duration.js'
 import * as logger from './logger.js'
+import { Delay, nextRun } from './retry.js'
 
 export type ClientFactory = {
 	acquire: () => Promise<pg.ClientBase>
-	persistent: (config?: {
-		onConnect: (newClient: pg.ClientBase) => unknown
-	}) => Promise<pg.ClientBase>
 	release: (client: pg.ClientBase) => Promise<void>
-	withClient: (
-		fn: (client: pg.ClientBase) => Promise<unknown>
-	) => Promise<unknown>
+	withClient: <R>(fn: (client: pg.ClientBase) => Promise<R>) => Promise<R>
 }
 
 const log = logger.create('core:psql')
@@ -33,25 +30,100 @@ export const poolConnectionFactory = (pool: pg.Pool): ClientFactory => {
 				throw new Error('Cannot release client not from the pool')
 			}
 		},
-		withClient(fn) {
+		withClient: fn => {
 			return pool.connect().then(client => {
 				return fn(client).finally(() => client.release())
 			})
 		},
-		persistent: async config => {
-			if (!persistent) {
-				persistent = await pool.connect()
-				config?.onConnect?.(persistent)
-				persistent.on('error', async err => {
-					log.error(err, 'Error from persistent client, restarting connection')
-					persistent?.release()
-					persistent = await pool.connect()
-					config?.onConnect?.(persistent)
+	}
+}
+
+const DEFAULT_RETRY = {
+	type: 'exponential',
+	delay: 200,
+	max: seconds(30),
+} as Delay
+type ConnectionListener = (client: pg.ClientBase) => unknown
+export class SharedPersistentConnection {
+	private pool: pg.Pool
+	private client: pg.PoolClient | undefined
+	private listeners: ConnectionListener[] = []
+	private connections = 0
+	private connecting: Promise<pg.ClientBase> | undefined = undefined
+	private retryDelay: Delay
+	private maxRetries: number
+
+	constructor(
+		pool: pg.Pool,
+		config?: {
+			retryDelay?: Delay
+			maxRetries?: number
+		}
+	) {
+		this.pool = pool
+		this.maxRetries = config?.maxRetries ?? Number.MAX_SAFE_INTEGER
+		this.retryDelay = config?.retryDelay ?? DEFAULT_RETRY
+	}
+
+	public async getClient(): Promise<pg.ClientBase> {
+		return this.client ?? this.connecting ?? this.connect()
+	}
+	public async acquire(listener: ConnectionListener): Promise<void> {
+		this.listeners.push(listener)
+		if (!this.client) {
+			await this.connect()
+		} else {
+			listener(this.client)
+		}
+	}
+
+	public async release(listener: ConnectionListener): Promise<void> {
+		const idx = this.listeners.indexOf(listener)
+		if (idx >= 0) {
+			this.listeners.splice(idx, 1)
+			if (this.listeners.length === 0) {
+				await this.client?.release()
+			}
+		}
+	}
+
+	private onError = ((err: Error): void => {
+		log.error(err, 'Persistent connection error')
+		this.connecting = this.connect()
+	}).bind(this)
+
+	private async connect(): Promise<pg.ClientBase> {
+		if (this.connecting) return this.connecting
+		this.connecting = new Promise((resolve, reject) => {
+			let attempt = 0
+			const tryConnecting = (): void => {
+				this.client?.release()
+				this.client = undefined
+				this.pool.connect((err, client) => {
+					if (err) {
+						log.error(err, 'Failed to connect to database')
+						if (attempt > this.maxRetries) {
+							log.error('Max connect attempts reached, giving up')
+							return reject(err)
+						} else {
+							const delay = nextRun(this.retryDelay, attempt++)
+							log.info(`reconnecting in ${formatDuration(delay)}`)
+							setTimeout(tryConnecting, delay)
+						}
+					} else {
+						log.debug('Database connected')
+						client.on('error', this.onError)
+						this.client = client
+						this.listeners.forEach(listener => listener(client))
+						this.connecting = undefined
+						resolve(client)
+					}
 				})
 			}
-			persistentConnections++
-			return persistent
-		},
+			tryConnecting()
+		})
+
+		return this.connecting
 	}
 }
 
@@ -64,10 +136,6 @@ export const singleConnectionFactory = (client: pg.Client): ClientFactory => ({
 	},
 	withClient: fn => {
 		return fn(client)
-	},
-	persistent: async () => {
-		//Just return the same client, there's nothing we can do to make it persistent
-		return client
 	},
 })
 
@@ -91,15 +159,8 @@ export const SQL = (strings: string[], ...args: QueryArgs): SQLTemplate => {
 	let statement = strings[0]
 	const values = []
 	for (const arg of args) {
-		if (Array.isArray(arg)) {
-			for (const val of arg) {
-				statement += `$${idx++},`
-				values.push(val)
-			}
-		} else {
-			statement += `$${idx++}`
-			values.push(arg)
-		}
+		statement += `$${idx++}`
+		values.push(arg)
 	}
 
 	return { statement, values }

@@ -1,5 +1,4 @@
-import { Duration } from 'schedule/duration.js'
-import { ids } from '@pgqueue/core'
+import { ids, duration } from '@pgqueue/core'
 
 export type JobId = string
 
@@ -39,11 +38,11 @@ export type JobWithOptions<P> = JobOptions & {
 export type JobOptions = {
 	retries?: number
 	priority?: number
-	delay?: Duration
+	delay?: duration.Duration
 }
 
 export type JobContext = {
-	postpone: (delay: Duration) => Promise<void>
+	postpone: (delay: duration.Duration) => Promise<void>
 }
 export type JobHandler<P, R> = (
 	job: RunningJob<P>,

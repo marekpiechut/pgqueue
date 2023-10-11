@@ -1,9 +1,8 @@
+import { collections, errors, logger, psql } from '@pgqueue/core'
+import EventEmitter from 'events'
 import pg from 'pg'
-import { logger, retry, psql, errors } from '@pgqueue/core'
 
 const log = logger.create('broadcaster')
-
-const MAX_RESTART_DELAY = 5000
 
 /**
  * Event is a simple object that is emitted by broadcaster. You'll receive it in your listener.
@@ -15,7 +14,7 @@ export type Event<B> = {
 	created: Date
 	/** Deserialized body of the event. */
 	payload: B
-	/** If event origin is the current server */
+	/** If event origin is the current server, so you can skip events you have just emitted yourself. */
 	self: boolean
 }
 
@@ -24,277 +23,143 @@ type MsgV1<B> = {
 	payload: B
 }
 
-type Unsubscribe = () => Promise<void>
-type Emitter<P> = (type: string, payload: P) => Promise<void>
-export type BroadcastListener<P> = (event: Event<P>) => void | Promise<void>
+export type BroadcastListener<P> = (event: Event<P>) => Promise<void> | void
+
 /**
  * Broadcaster is a simple event emitter that uses Postgres LISTEN/NOTIFY.
  * It's a perfect solution for ephemeral events that should be processed by
  * all cluster nodes and don't require any persistence.
  */
-export type Broadcaster = {
-	/**
-	 * Start broadcaster and listren for events.
-	 * Make sure all your listeners are registered before calling this method
-	 * or you might miss some events.
-	 */
-	start: () => Promise<void>
-	/**
-	 * Subscribe to events of a particular type. Only first listener will execute
-	 * database `LISTEN` command, all subsequent listeners will just be added to local list.
-	 *
-	 *
-	 * @param type Event type to listen to
-	 * @param listener Event handler, can be async and throwing errors will not crash the broadcaster.
-	 * @returns Unsubscribe function, call it to stop listening for events with this particular listener.
-	 */
-	on: <P>(type: string, listener: BroadcastListener<P>) => Promise<Unsubscribe>
+export class Broadcaster extends EventEmitter {
+	private handlers: collections.Multimap<string, BroadcastListener<unknown>> =
+		new collections.Multimap()
 
-	/**
-	 * Emit event to a global channel. All active listeners on all systems will receive it.
-	 * Remember that current system is not filtered out and if you listen for the same event type
-	 * **this system will also be notified** and will process the event. Usually it's a desired behavior
-	 * as system should be operational even if there's only one working instance. If you want different behaviour
-	 * you can filter out current system in your listener.
-	 *
-	 * @param event Event to emit, make sure it is **JSON serializable**.
-	 */
-	off: <P>(type: string, listener: BroadcastListener<P>) => Promise<void>
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	emit: Emitter<any>
-	/**
-	 * Get an emitter using a different client. Useful to emit events within transaction.
-	 *
-	 * This method is very useful and allows for transactional events. Whenever you want to emit
-	 * events indicating that database entity you probably should use this method **instead of `emit`**.
-	 * This way, if transaction was rolled back, events will not be emitted. This provides a very powerful
-	 * way to keep your database and event bus in sync.
-	 * @see {@link https://www.postgresql.org/docs/current/sql-notify.html} for more details about how Postgres handles transactions and notifications.
-	 *
-	 * If you use this method you are responsible for closing the client and committing the transaction.
-	 *
-	 * @see {@link emit} for details about event emission itself.
-	 * @param client client to use, probably wit a running transaction
-	 * @returns Emitter that uses provided client
-	 */
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	withTx: (client: pg.Client) => { emit: Emitter<any> }
-	/**
-	 * Shutdown broadcaster. Unsuscribe all listeners **and close database connection**.
-	 */
-	shutdown: () => Promise<void>
-}
-
-type PrivateBroadcaster = Broadcaster & {
-	setClient: (client: pg.ClientBase) => void
-}
-
-export type BroadcasterConfig = {
-	/**
-	 * Custom handler for listener errors. Errors will be logged anyway, so if you don't need anything
-	 * special, you can skip it. Note that **errors are not recoverable** and will not block other listeners.
-	 *
-	 * Pass in your handler if you have some external system that you need to notify of errors, or need a custom
-	 * logging.
-	 */
-	onError?: (e: Error) => void
-	/**
-	 * Custom error handler for client errors. Client errors are fatal and will restart the connection.
-	 * Note that **errors are not recoverable**.
-	 *
-	 * Pass in your handler if you have some external system that you need to notify of errors, or need a custom
-	 * logging.
-	 */
-	onClientError?: (e: Error) => void
-	/**
-	 * Custom reconnect delay. By default it will retry every second,
-	 * but you can change it to anything you like.
-	 */
-	reconnectDelay?: retry.Delay
-}
-
-/**
- * Create new broadcaster. Usually you want to create only one
- * per application and share it across all modules.
- *
- * This instance will **not** handle reconnects on client errors.
- * You need to handle them yourself and re-create the broadcaster.
- * Check Client.on('error') event to register error handler.
- *
- * It's usually better to use {@link fromPool} instead.
- * As it will handle all errors and reconnect when needed.
- *
- * PG client **must not** be from the pool and should not be reused for other purposes
- * as crashing the connection might break the broadcaster.
- * Best is to just create a new Client, connect it, pass here and forget about it until you need to shut down.
- * Remember, that **you are responsible for closing the client** after shutdown.
- *
- * Make sure you **register all listeners before calling `start`** method or you might miss some events.
- *
- * @param client PG client **must not** be from the pool, and has to be connected. You are responsible for closing it after shutdown.
- */
-export const fromClient = (
-	client: pg.ClientBase,
-	config?: BroadcasterConfig
-): PrivateBroadcaster => {
-	//eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const listeners: Record<string, BroadcastListener<any>[]> = {}
-
-	const instance: PrivateBroadcaster = {
-		start: async (): Promise<void> => {
-			log.info('Starting broadcaster')
-			client.on('notification', async msg => {
-				const type = msg.channel
-				const eventListeners = listeners[type]
-				if (!eventListeners?.length) return
-
-				let event: Event<unknown>
-				try {
-					if (!msg.payload) throw new Error('No payload')
-					const content = JSON.parse(msg.payload) as MsgV1<unknown>
-					event = {
-						type,
-						created: new Date(content.created),
-						payload: content.payload,
-						// processID is not in TS types, but it's there
-						// eslint-disable-next-line @typescript-eslint/no-explicit-any
-						self: (client as any).processID === msg.processId,
-					}
-				} catch (e) {
-					log.error('Error parsing event', msg.channel, e, msg)
-					const error = errors.toError(e)
-					config?.onError?.(error)
-					return
-				}
-
-				eventListeners.forEach(listener => {
-					try {
-						listener(event)
-					} catch (e) {
-						log.error('Error in broadcast listener', msg.channel, e)
-						const error = errors.toError(e)
-						config?.onError?.(error)
-					}
-				})
-			})
-
-			for (const type in listeners) {
-				log.debug('Listening for events:', type)
-				await client.query(`LISTEN ${client.escapeIdentifier(type)}`)
-			}
-		},
-		on: async (type, listener): Promise<Unsubscribe> => {
-			if (listeners[type]) {
-				listeners[type].push(listener)
-			} else {
-				listeners[type] = [listener]
-				await client.query(`LISTEN ${client.escapeIdentifier(type)}`)
-			}
-
-			return () => instance.off(type, listener)
-		},
-		off: async (type, listener): Promise<void> => {
-			listeners[type] = listeners[type].filter(l => l !== listener)
-			if (listeners[type].length === 0) {
-				await client.query(`UNLISTEN ${client.escapeIdentifier(type)}`)
-				delete listeners[type]
-			}
-		},
-		emit: <P>(type: string, payload: P) => emit(client, type, payload),
-		withTx: client => ({
-			emit: (type, payload) => emit(client, type, payload),
-		}),
-		setClient: (newClient): void => {
-			client = newClient
-		},
-		shutdown: async (): Promise<void> => {
-			log.info('Shutting down broadcaster')
-			for (const type in listeners) {
-				delete listeners[type]
-			}
-			await client.query('UNLISTEN *')
-			log.info('Broadcaster shutdown complete')
-		},
+	constructor(private persistentConnection: psql.SharedPersistentConnection) {
+		super()
 	}
 
-	return instance
-}
-
-/**
- * **This is the preferred way to create broadcaster in production apps**
- *
- * Creates new broadcaster. Usually you want to create only one
- * per application and share it across all modules.
- *
- * Broadcaster created with this method will handle all errors
- * and reconnect when needed.
- *
- * Keep in mind that creating a new broadcaster will permanenly occupy
- * one of pool connections.
- *
- * Make sure you **register all listeners before calling `start`** method or you might miss some events.
- */
-export const fromPool = async (
-	pool: pg.Pool,
-	config?: BroadcasterConfig
-): Promise<Broadcaster> => {
-	return fromFactory(psql.poolConnectionFactory(pool), config)
-}
-
-export const fromFactory = async (
-	factory: psql.ClientFactory,
-	config?: BroadcasterConfig
-): Promise<Broadcaster> => {
-	const retryDelay = config?.reconnectDelay ?? { type: 'constant', delay: 1000 }
-
-	let attempt = 0
-	const reconnect = async (): Promise<void> => {
-		client = await factory.acquire()
-		client.on('error', handleError)
-
-		instance.setClient(client)
-		instance
-			.start()
-			.then(() => {
-				attempt = 0
-			})
-			.catch(e => {
-				log.error('Error starting broadcaster', e)
-				const waitTime = retry.nextRun(retryDelay, ++attempt, MAX_RESTART_DELAY)
-				setTimeout(reconnect, waitTime)
-			})
+	public async publish<P>(
+		client: pg.ClientBase,
+		type: string,
+		payload: P
+	): Promise<void> {
+		return publish(client, type, payload)
 	}
-	const handleError = async (e: Error): Promise<void> => {
-		log.error(e, 'Client error, restarting connection')
+
+	public withTx<P>(
+		client: pg.ClientBase
+	): (type: string, payload: P) => Promise<void> {
+		return (type: string, payload: P): Promise<void> =>
+			publish(client, type, payload)
+	}
+
+	public async start(): Promise<void> {
+		log.info('Starting broadcaster')
+		await this.persistentConnection.acquire(this.onConnection)
+		this.emit('started')
+	}
+
+	public async stop(force?: boolean): Promise<void> {
 		try {
-			config?.onClientError?.(e)
-		} catch (e) {
-			log.error(e, 'Error in onClientError handler')
+			await this.unlisten(...this.handlers.keys())
+			const client = await this.persistentConnection.getClient()
+			client.off('notification', this.onEvent)
+		} catch (err) {
+			this.emit('error', err)
+			if (!force) throw err
+		} finally {
+			await this.persistentConnection.release(this.onConnection)
 		}
 
-		if (client) factory.release(client).catch(log.error)
-		const waitTime = retry.nextRun(retryDelay, attempt++, MAX_RESTART_DELAY)
-		setTimeout(reconnect, waitTime)
+		this.emit('stopped')
 	}
 
-	let client: pg.ClientBase = await factory.acquire()
-	const instance = fromClient(client, config)
-	client.on('error', handleError)
+	public subscribe(
+		type: string,
+		listener: BroadcastListener<unknown>
+	): () => Promise<void> {
+		if (this.handlers.set(type, listener)) {
+			this.listen(type)
+		}
+		return () => {
+			return this.unsubscribe(type, listener)
+		}
+	}
 
-	return {
-		...instance,
-		shutdown: async (): Promise<void> => {
-			try {
-				await instance.shutdown()
-			} finally {
-				log.debug("Releasing broadcaster's client")
-				await factory.release(client)
+	public async unsubscribe(
+		type: string,
+		listener: BroadcastListener<unknown>
+	): Promise<void> {
+		if (this.handlers.delete(type, listener)) {
+			await this.unlisten(type)
+		}
+	}
+
+	private onConnection = (async (client: pg.ClientBase): Promise<void> => {
+		log.info('Persistent connection established, subscribing to events')
+		client.on('notification', this.onEvent)
+		await this.listen(...this.handlers.keys())
+	}).bind(this)
+
+	private onEvent = (async (msg: pg.Notification): Promise<void> => {
+		const type = msg.channel
+		const typeHandlers = this.handlers.get(type)
+		if (!typeHandlers?.length) return
+
+		let event: Event<unknown>
+		try {
+			if (!msg.payload) throw new Error('No payload')
+			const client = await this.persistentConnection.getClient()
+			const content = JSON.parse(msg.payload) as MsgV1<unknown>
+			event = {
+				type,
+				created: new Date(content.created),
+				payload: content.payload,
+				// processID is not in TS types, but it's there
+				// eslint-disable-next-line @typescript-eslint/no-explicit-any
+				self: (client as any).processID === msg.processId,
 			}
-		},
+		} catch (e) {
+			log.error('Error parsing event', msg.channel, e, msg)
+			const error = errors.toError(e)
+			this.emit('error', error)
+			return
+		}
+
+		await Promise.all(
+			typeHandlers.map(listener => {
+				try {
+					return listener(event)
+				} catch (e) {
+					log.error('Error in broadcast listener', msg.channel, e)
+					const error = errors.toError(e)
+					this.emit('error', error)
+				}
+			})
+		)
+	}).bind(this)
+
+	private async listen(...types: string[]): Promise<void> {
+		log.debug('Subscribing to event types', types)
+
+		const client = await this.persistentConnection.getClient()
+		for (const type of types) {
+			log.debug('Listening for events:', type)
+			await client.query(`LISTEN ${client.escapeIdentifier(type)}`)
+		}
+	}
+	private async unlisten(...types: string[]): Promise<void> {
+		log.debug('Unsubscribing from event types', types)
+
+		const client = await this.persistentConnection.getClient()
+		for (const type of types) {
+			log.debug('Unlistening events:', type)
+			await client.query(`UNLISTEN ${client.escapeIdentifier(type)}`)
+		}
 	}
 }
 
-const emit = async <P>(
+export const publish = async <P>(
 	client: pg.ClientBase,
 	type: string,
 	payload: P
@@ -308,8 +173,13 @@ const emit = async <P>(
 		`NOTIFY ${client.escapeIdentifier(type)}, ${client.escapeLiteral(json)}`
 	)
 }
+export const withClient =
+	(client: pg.ClientBase) =>
+	<P>(type: string, payload: P): Promise<void> =>
+		publish(client, type, payload)
 
 export default {
-	fromClient,
-	fromPool,
+	Broadcaster,
+	publish,
+	withClient,
 }

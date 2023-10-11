@@ -1,6 +1,8 @@
 import chalk from 'chalk'
-import { Command } from 'commander'
+import { Command, Option } from 'commander'
 import pg from 'pg'
+import { justBroadcast } from '@pgqueue/quickstart'
+//TODO: this should be using some quickstart api
 import broadcast from '@pgqueue/broadcast'
 import { PAYLOAD_FORMAT_HELP, parsePayload, pgConfig } from './utils.js'
 
@@ -8,20 +10,28 @@ export const listen = new Command('listen')
 listen
 	.description('Start listening to a channel')
 	.argument('channel', 'name of the channel to listen to')
+	.addOption(
+		new Option('--format <format>', 'Output format')
+			.default('json')
+			.choices(['short', 'json'])
+	)
 	.action(async channel => {
 		const opts = listen.optsWithGlobals()
-		const pool = new pg.Pool(pgConfig(opts))
-		const events = await broadcast.fromPool(pool)
+		const broadcaster = await justBroadcast(pgConfig(opts))
+		const formatter =
+			EVENT_FORMATTERS[opts.format as keyof typeof EVENT_FORMATTERS] ||
+			EVENT_FORMATTERS.json
+		let count = 0
 		let last = new Date(0)
-		events.on(channel, payload => {
+		broadcaster.subscribe(channel, payload => {
 			if (last.getTime() < payload.created.getTime() - 1000 * 30) {
 				console.log(chalk.gray('----------------------------------------'))
 			}
-			console.log(chalk.green(JSON.stringify(payload, null, 2)))
+			console.log(formatter(++count, payload))
 			last = payload.created
 		})
 		console.log(`Listening to ${channel}...`)
-		await events.start()
+		await broadcaster.start()
 	})
 
 export const emit = new Command('emit')
@@ -36,11 +46,14 @@ emit
 
 		await client.connect()
 		try {
-			const events = await broadcast.fromClient(client)
-			await events.start()
-			await events.emit(channel, payload)
-			await events.shutdown()
+			await broadcast.publish(client, channel, payload)
 		} finally {
 			await client.end()
 		}
 	})
+
+const EVENT_FORMATTERS = {
+	short: (count: number, event: { type: string }) =>
+		`Event ${count}: ${chalk.green(event.type)}`,
+	json: (_count: number, event: unknown) => JSON.stringify(event, null, 2),
+}
