@@ -1,10 +1,8 @@
-#!/usr/bin/env node
-
 import { quickstart } from '@pgqueue/schedule'
 import { Command, Option } from 'commander'
 import pg from 'pg'
 import { PAYLOAD_FORMAT_HELP, parsePayload, pgConfig } from './utils.js'
-import { default as date } from 'date.js-ts'
+import date from 'date.js-two'
 
 export const schedule = new Command('schedule')
 schedule
@@ -23,11 +21,13 @@ schedule
 			'Cron expression ex.: "0 0 12 * * *", check (cron-parser) for details'
 		).conflicts('time')
 	)
+	.option('--timezone <tz>', 'Timezone to use for scheduling')
 	.action(async (type, data) => {
 		const delay = schedule.opts().time
 		const cron = schedule.opts().cron
 
-		const parsedSchedule = delay ? date.default(delay) : cron
+		const parsedSchedule = delay ? date(delay) : cron
+
 		if (
 			parsedSchedule instanceof Date &&
 			parsedSchedule.getTime() < Date.now()
@@ -37,6 +37,7 @@ schedule
 
 		const opts = schedule.optsWithGlobals()
 		const payload = data?.length ? parsePayload(data) : undefined
+		const timezone = opts.timezone
 		const scheduler = await quickstart(pgConfig(opts))
 		const client = new pg.Client(pgConfig(opts))
 		await client.connect()
@@ -45,7 +46,8 @@ schedule
 				client,
 				type,
 				parsedSchedule,
-				payload
+				payload,
+				{ timezone }
 			)
 			console.log(`Job scheduled "${type}"`, job)
 		} finally {

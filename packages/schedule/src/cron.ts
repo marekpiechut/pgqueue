@@ -1,13 +1,19 @@
 import cron from 'cron-parser'
 import { duration } from '@pgqueue/core'
+import { DateTime } from 'luxon'
 
 type CronOptions = {
 	tz?: string
 }
 export type Schedule = BasicSchedule | CronSchedule | Date | string
-export const nextRun = (input: Schedule, options: CronOptions): Date => {
+export const nextRun = (input: Schedule, options?: CronOptions): Date => {
+	validateTimeZone(options?.tz)
+
 	if (input instanceof Date) {
-		return input
+		console.log('input is date', input, options?.tz)
+		return DateTime.fromJSDate(input)
+			.setZone(options?.tz, { keepLocalTime: true })
+			.toJSDate()
 	} else if (typeof input === 'string') {
 		return cron.parseExpression(input, options).next().toDate()
 	} else if (input.type === 'basic') {
@@ -83,6 +89,12 @@ export const isFuture = (input: Schedule): boolean => {
 	//TODO: do we need to validate cron & basic schedule?
 	//it might have a pattern, that has no future runs
 	return true
+}
+
+export const validateTimeZone = (input?: string): void => {
+	if (input && !DateTime.local().setZone(input).isValid) {
+		throw new Error(`Invalid timezone: ${input}`)
+	}
 }
 
 export default {

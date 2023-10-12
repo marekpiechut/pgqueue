@@ -28,11 +28,13 @@
 	"type": "module",
 	"private": true,
 	"devDependencies": {
+		"@types/luxon": "^3.3.2",
 		"@types/pg": "^8.10.2"
 	},
 	"dependencies": {
 		"@pgqueue/broadcast": "^1.0.0",
 		"@pgqueue/core": "^1.0.0",
-		"cron-parser": "^4.9.0"
+		"cron-parser": "^4.9.0",
+		"luxon": "^3.4.3"
 	}
 }

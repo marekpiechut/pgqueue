@@ -1,5 +1,5 @@
 import { ids } from '@pgqueue/core'
-import { Schedule, isFuture } from './cron.js'
+import { Schedule, isFuture, nextRun } from './cron.js'
 
 export type ScheduleId = string
 export type ScheduledJob<P> = {
@@ -21,14 +21,15 @@ export const newSchedule = <P>(
 	name: string,
 	schedule: Schedule,
 	payload: P,
-	_options?: ScheduledJobOptions
+	options?: ScheduledJobOptions
 ): ScheduledJob<P> => {
 	const job = {
 		id: ids.uuid(),
 		type: name,
 		payload: payload,
 		schedule: schedule,
-		timezone: _options?.timezone,
+		timezone: options?.timezone,
+		nextRun: nextRun(schedule, { tz: options?.timezone }),
 		created: new Date(),
 	}
 	validate.isFuture(job)

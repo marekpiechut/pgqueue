@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import jobs from '@pgqueue/queue'
 import { Command, Option } from 'commander'
 import chalk from 'chalk'
