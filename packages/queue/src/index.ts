@@ -56,7 +56,7 @@ class Queue extends events.TypedEventEmitter<QueueEvents> {
 		this.config = { ...DEFAULT_CONFIG, ...config }
 		this.clientFactory = clientFactory
 		this.persistentConnection = persistentConnection
-		this.channelKey = `pgqueue:job:added:${this.config.nodeId}`
+		this.channelKey = `pgqueue_job_added_${this.config.nodeId}`
 	}
 
 	public async start(): Promise<void> {
@@ -65,10 +65,10 @@ class Queue extends events.TypedEventEmitter<QueueEvents> {
 			throw new Error('Queue already started')
 		}
 		log.info('Starting queue listener')
-		await this.clientFactory.withClient(client =>
+		await this.clientFactory.withTx(client =>
 			schema.applyEvolutions(this.config, client)
 		)
-		await this.clientFactory.withClient(client => {
+		await this.clientFactory.withTx(client => {
 			const repository = new JobRepository(client, this.config)
 			return repository.restartAll()
 		})

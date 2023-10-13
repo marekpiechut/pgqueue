@@ -41,14 +41,14 @@ poll
 			.choices(['short', 'json'])
 	)
 	.option('-y --yes', 'Skip confirmation')
-	.argument('name', 'job name')
+	.argument('type', 'job type')
 	.argument('[result...]', `job result - ${PAYLOAD_FORMAT_HELP}`)
-	.action(async (name, data) => {
+	.action(async (type, data) => {
 		const opts = poll.optsWithGlobals()
 		if (!opts.yes) {
 			const answer = await ask(`
 ${chalk.red('WARNING')}: You are about to start polling the queue "${chalk.bold(
-				name
+				type
 			)}".
 This will consume jobs from the queue and process them.
 Jobs captured by this process will not be available for other consumers.
@@ -64,7 +64,7 @@ Enter "yes" to continue.\n`)
 		const queue = await jobs.quickstart(pgConfig(opts))
 		const result = data?.length ? parsePayload(data) : undefined
 		console.warn(
-			`Subscribed to queue "${chalk.bold(name)}" ${
+			`Subscribed to queue "${chalk.bold(type)}" ${
 				result ? 'with result: \n' + JSON.stringify(result, null, 2) + '\n' : ''
 			}${chalk.red('THIS WILL CONSUME JOBS !!!')}`
 		)
@@ -72,7 +72,7 @@ Enter "yes" to continue.\n`)
 			JOB_FORMATTERS[opts.format as keyof typeof JOB_FORMATTERS] ||
 			JOB_FORMATTERS.json
 		let count = 0
-		queue.addHandler(name, async job => {
+		queue.addHandler(type, async job => {
 			console.log(formatter(++count, job))
 			return result
 		})

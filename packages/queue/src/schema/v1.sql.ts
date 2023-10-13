@@ -60,7 +60,7 @@ export default (config: Config): Evolution => ({
 				ON CONFLICT ON CONSTRAINT listeners_pkey DO UPDATE SET
 				pid = EXCLUDED.pid;
 
-				EXECUTE 'LISTEN ' || quote_ident('pgqueue:job:added:' || nodeId);
+				EXECUTE 'LISTEN ' || quote_ident('pgqueue_job_added_' || nodeId);
 				RETURN cardinality(types);
 				END;
 			$$ LANGUAGE plpgsql;
@@ -76,7 +76,7 @@ export default (config: Config): Evolution => ({
 				(nodeId = nodeId OR pid = pg_backend_pid()) AND type = ANY(types);
 			END IF;
 
-			EXECUTE 'UNLISTEN ' || quote_ident('pgqueue:job:added:' || nodeId);
+			EXECUTE 'UNLISTEN ' || quote_ident('pgqueue_job_added_' || nodeId);
 			RETURN FOUND;
 			END;
 		$$ LANGUAGE plpgsql;
@@ -101,7 +101,7 @@ export default (config: Config): Evolution => ({
 					items := floor(random() * items);
 					MOVE ABSOLUTE (items) FROM cursor; 
 					FETCH cursor INTO row;
-					PERFORM pg_notify('pgqueue:job:added:' || row.nodeId, NEW.type);
+					PERFORM pg_notify('pgqueue_job_added_' || row.nodeId, NEW.type);
 				END IF;
 				
 				CLOSE cursor;

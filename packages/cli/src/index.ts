@@ -4,7 +4,7 @@ import { program } from 'commander'
 import { db } from './commands/db.js'
 import { emit, listen } from './commands/broadcast.js'
 import { poll, push } from './commands/queue.js'
-import { schedule } from './commands/schedule.js'
+import { schedule, execute } from './commands/schedule.js'
 
 program
 	.name('pgqueue')
@@ -27,6 +27,7 @@ program.addCommand(push)
 program.addCommand(poll)
 program.addCommand(db)
 program.addCommand(schedule)
+program.addCommand(execute)
 
 await program.parseAsync().catch(e => {
 	console.error(e)

@@ -1,8 +1,25 @@
-import { date, ids, logger, psql } from '@pgqueue/core'
+import {
+	collections,
+	date,
+	errors,
+	events,
+	ids,
+	logger,
+	psql,
+} from '@pgqueue/core'
 import { Schedule } from 'cron.js'
 import pg from 'pg'
-import { ScheduledJob, ScheduledJobOptions, newSchedule } from './models.js'
-import { ScheduledJobRepository, toJob } from './repository.js'
+import {
+	ScheduleHandler,
+	ScheduledJob,
+	ScheduledJobContext,
+	ScheduledJobOptions,
+	ScheduledJobRun,
+	newSchedule,
+	runFailed,
+	runPerformed,
+} from './models.js'
+import { ScheduledJobRepository, parseNotification } from './repository.js'
 import * as schema from './schema/index.js'
 
 const log = logger.create('schedule')
@@ -20,18 +37,35 @@ const DEFAULT_CONFIG = {
 	pollInterval: 30000,
 	runMaintenance: true,
 }
-class Scheduler {
+type Events = {
+	started: () => void
+	stopped: () => void
+	failed: (
+		job: ScheduledJob<unknown>,
+		run: ScheduledJobRun<unknown>,
+		err: Error
+	) => void
+	processed: (job: ScheduledJob<unknown>, run: ScheduledJobRun<unknown>) => void
+	error: (err: Error) => void
+}
+class Scheduler extends events.TypedEventEmitter<Events> {
 	private config: Config & typeof DEFAULT_CONFIG
 	private clientFactory: psql.ClientFactory
 	private persistentConnection: psql.SharedPersistentConnection
-	private nextWakeUp = new Date(0)
+	private nextWakeUp: Date | undefined
 	private wakeUpTimeout: NodeJS.Timeout | undefined
+	private handlers = new collections.Multimap<
+		string,
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		ScheduleHandler<any, any>
+	>()
 
 	constructor(
 		clientFactory: psql.ClientFactory,
 		persistentConnection: psql.SharedPersistentConnection,
 		config?: Config
 	) {
+		super()
 		this.config = { ...DEFAULT_CONFIG, ...config }
 		this.clientFactory = clientFactory
 		this.persistentConnection = persistentConnection
@@ -54,45 +88,136 @@ class Scheduler {
 
 	public async start(): Promise<void> {
 		log.debug('Starting scheduler')
+		await this.clientFactory.withTx(client =>
+			schema.applyEvolutions(this.config, client)
+		)
+		await this.clientFactory.withTx(client =>
+			schema.applyEvolutions(this.config, client)
+		)
 		this.persistentConnection.acquire(this.onConnection)
+
+		this.poll()
+		this.emit('started')
 	}
 
 	public async stop(): Promise<void> {
 		log.debug('Stopping scheduler')
 		const client = await this.persistentConnection.getClient()
-		await client.query('UNLISTEN pgqueue:schedule:updated')
+		await client.query(`UNLISTEN pgqueue_schedule_updated"`)
 		await this.persistentConnection.release(this.onConnection)
+		this.nextWakeUp = undefined
+		if (this.wakeUpTimeout) {
+			clearTimeout(this.wakeUpTimeout)
+		}
+		this.emit('stopped')
 	}
 
-	private onEvent = (async (event: pg.Notification) => {
-		if (event.channel !== 'pgqueue:schedule:updated') return
-		if (!event.payload) {
-			log.warn('Received empty payload for pgqueue:schedule:updated')
-			return
-		}
+	public async addHandler<P, R>(
+		type: string,
+		handler: ScheduleHandler<P, R>
+	): Promise<void> {
+		this.handlers.set(type, handler)
+	}
 
-		//TODO: maybe this should go into repostiory
-		const item = toJob(JSON.parse(event.payload))
-		if (item.nextRun) {
-			this.scheduleWakeUp(item.nextRun)
+	public async removeHandler<P, R>(
+		type: string,
+		handler: ScheduleHandler<P, R>
+	): Promise<void> {
+		this.handlers.delete(type, handler)
+	}
+
+	private onEvent = (async (notification: pg.Notification) => {
+		const event = parseNotification(notification)
+		if (event.type === 'schedule:updated' && event.job.nextRun) {
+			this.scheduleWakeUp(event.job.nextRun)
 		}
 	}).bind(this)
 
 	private onConnection = (async (client: pg.ClientBase) => {
 		client.on('notification', this.onEvent)
-		await client.query('LISTEN pgqueue:schedule:updated')
+		await client.query(`LISTEN pgqueue_schedule_updated`)
 	}).bind(this)
 
+	//TODO: we should probably skip wake-ups for jobs that don't have handlers registered
 	private scheduleWakeUp(newDate: Date): void {
-		if (date.isBefore(newDate, this.nextWakeUp)) {
+		if (!this.nextWakeUp || date.isBefore(newDate, this.nextWakeUp)) {
+			log.debug("Rescheduling scheduler's next wake up", newDate)
 			if (this.wakeUpTimeout) {
 				clearTimeout(this.wakeUpTimeout)
 			}
-			this.wakeUpTimeout = setTimeout(() => this.poll(), newDate.getTime())
+			const now = new Date()
+			const delay = Math.max(0, newDate.getTime() - now.getTime())
+			this.nextWakeUp = delay > 0 ? newDate : now
+			this.wakeUpTimeout = setTimeout(() => this.poll(), delay)
 		}
 	}
 
-	private async poll(): Promise<void> {}
+	private async poll(): Promise<void> {
+		//TODO: poll until all jobs are processed
+		//TODO: fetch and update next wake up time when done
+		//maybe poll should union with next job, that is after now?
+		if (this.nextWakeUp && date.isPast(this.nextWakeUp)) {
+			this.nextWakeUp = undefined
+		}
+
+		//TODO: make configurable
+		const batchSize = 2
+		const jobs = await this.clientFactory.withTx(async client => {
+			const repository = new ScheduledJobRepository(client, this.config)
+			const types = Array.from(this.handlers.keys())
+			return repository.poll(types, batchSize)
+		})
+
+		log.debug(`Found ${jobs.length} scheduled jobs`, jobs)
+
+		for (const job of jobs) {
+			await this.processJob(job)
+		}
+	}
+
+	private async processJob<P>(job: ScheduledJob<P>): Promise<void> {
+		const handlers = this.handlers.get(job.type)
+
+		if (handlers) {
+			log.debug(`Found ${handlers.length} handlers for job type ${job.type}`)
+
+			const context = this.createContext(job)
+			try {
+				const res = await Promise.all(handlers.map(h => h(job, context)))
+
+				await this.clientFactory.withTx(async client => {
+					const repository = new ScheduledJobRepository(client, this.config)
+					const [completedJob, run] = runPerformed(
+						job,
+						res.length === 1 ? res[0] : res
+					)
+					const [savedJob, savedRun] = await Promise.all([
+						repository.update(completedJob),
+						repository.saveRun(run),
+					])
+					this.emit('processed', savedJob, savedRun)
+					log.debug('Scheduled job processed', savedJob, savedRun)
+				})
+			} catch (err) {
+				log.error(err, 'Error while processing scheduled job', job)
+				await this.clientFactory.withTx(async client => {
+					const repository = new ScheduledJobRepository(client, this.config)
+					const error = errors.toError(err)
+					const [failedJob, run] = runFailed(job, error)
+					const [savedJob, savedRun] = await Promise.all([
+						repository.update(failedJob),
+						repository.saveRun(run),
+					])
+					this.emit('failed', savedJob, savedRun, error)
+				})
+
+				throw err
+			}
+		}
+	}
+	private createContext<P>(_job: ScheduledJob<P>): ScheduledJobContext {
+		return null
+	}
 }
 
 const evolutions = {
@@ -114,6 +239,13 @@ const quickstart = async (
 }
 
 export { DEFAULT_SCHEMA, Scheduler, evolutions, quickstart }
+export type {
+	ScheduleHandler,
+	ScheduledJob,
+	ScheduledJobContext,
+	ScheduledJobOptions,
+	ScheduledJobRun,
+}
 export default {
 	DEFAULT_SCHEMA,
 	Scheduler,
