@@ -8,15 +8,19 @@ type Config = {
 export default (config: Config): Evolution => ({
 	ups: [
 		`CREATE SCHEMA IF NOT EXISTS ${config.schema}`,
+		`CREATE TYPE ${config.schema}.JOB_STATE AS ENUM ('WAITING', 'RUNNING', 'COMPLETED', 'PAUSED')`,
 		// -- TABLES -- //
 		`CREATE TABLE ${config.schema}.SCHEDULE (
 			id UUID NOT NULL,
 			key VARCHAR(64) UNIQUE DEFAULT NULL,
 			type VARCHAR(64) NOT NULL,
+			state ${config.schema}.JOB_STATE NOT NULL,
 			created TIMESTAMP NOT NULL,
 			updated TIMESTAMP,
 			next_run TIMESTAMP,
 			schedule VARCHAR(64),
+			last_run TIMESTAMP,
+			first_run TIMESTAMP,
 			-- Longest timezone name is 28 chars --
 			timezone VARCHAR(32),
 			tries INTEGER,
@@ -27,11 +31,13 @@ export default (config: Config): Evolution => ({
 			id UUID NOT NULL,
 			schedule_id UUID NOT NULL,
 			key VARCHAR(64) UNIQUE DEFAULT NULL,
+			state ${config.schema}.JOB_STATE NOT NULL,
 			type VARCHAR(64) NOT NULL,
 			created TIMESTAMP NOT NULL,
 			updated TIMESTAMP,
 			ran_at TIMESTAMP,
 			payload JSONB,
+			result JSONB,
 			PRIMARY KEY(id)
 		)`,
 		// -- TRIGGERS -- //

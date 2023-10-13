@@ -1,7 +1,8 @@
-import { collections, errors, ids, logger, psql } from '@pgqueue/core'
-import EventEmitter from 'events'
+import { collections, errors, events, ids, logger, psql } from '@pgqueue/core'
 import pg from 'pg'
 import {
+	CompletedJob,
+	FailedJob,
 	JobContext,
 	JobHandler,
 	JobWithOptions,
@@ -29,7 +30,14 @@ const DEFAULT_CONFIG = {
 	pollInterval: 30000,
 	runMaintenance: true,
 }
-class Queue extends EventEmitter {
+type QueueEvents = {
+	started: () => void
+	stopped: () => void
+	failed: (job: FailedJob<unknown> | PendingJob<unknown>, err: Error) => void
+	processed: (job: CompletedJob<unknown, unknown>) => void
+	error: (err: Error) => void
+}
+class Queue extends events.TypedEventEmitter<QueueEvents> {
 	private clientFactory: psql.ClientFactory
 	private persistentConnection: psql.SharedPersistentConnection
 	private config: Config & typeof DEFAULT_CONFIG
@@ -81,7 +89,7 @@ class Queue extends EventEmitter {
 			const client = await this.persistentConnection.getClient()
 			client.off('notification', this.onEvent)
 		} catch (err) {
-			this.emit('error', err)
+			this.emit('error', errors.toError(err))
 			if (!force) throw err
 		}
 		await this.persistentConnection.release(this.onConnection)
@@ -131,51 +139,53 @@ class Queue extends EventEmitter {
 	private onConnection = (async (client: pg.ClientBase): Promise<void> => {
 		client.on('notification', this.onEvent)
 		this.subscribe(...this.handlers.keys())
-		this.poll()
+		await this.run
+		this.run = this.poll()
 	}).bind(this)
 
-	private onEvent = ((event: pg.Notification): void => {
+	private onEvent = (async (event: pg.Notification): Promise<void> => {
 		const { channel, payload } = event
 		if (channel === this.channelKey) {
 			const type = payload as string
 			const listeners = this.handlers.get(type)
-			if (listeners && !this.run) {
-				this.poll()
+			if (listeners) {
+				await this.run
+				this.run = this.poll()
 			}
 		}
 	}).bind(this)
 
-	private async poll(): Promise<void> {
+	private async poll(count: number = 0): Promise<void> {
 		log.debug('Polling for jobs')
-		//TODO: poll until there are unlocked jobs to process
-		const types = this.handlers.keys()
-		this.run = this.clientFactory
-			.withClient(async client => {
+		//TODO: configure batch size
+		try {
+			const batchSize = 2
+			const types = this.handlers.keys()
+			const jobs = await this.clientFactory.withTx(async client => {
 				const repository = new JobRepository(client, this.config)
-				const jobs = await psql.withTx(client, () =>
-					repository.poll(Array.from(types))
-				)
-				if (!jobs.length) {
-					log.debug('No jobs found')
-				}
-				for (const job of jobs) {
-					await this.processJob(client, repository, job)
-				}
+				return repository.poll(Array.from(types), batchSize)
 			})
-			.catch(err => {
-				log.error(err, 'Error while processing jobs')
-				this.emit('error', err)
-			})
-			.finally(() => (this.run = undefined))
+			if (jobs.length === 0) {
+				log.debug('No jobs found, processed', count)
+				return
+			}
 
-		await this.run
+			log.debug(`Found ${jobs.length} jobs, batch size ${batchSize}`)
+			for (const job of jobs) {
+				await this.processJob(job)
+			}
+			if (jobs.length === batchSize) {
+				await this.poll(count + jobs.length)
+			} else {
+				log.debug('No more jobs found, processed', count + jobs.length)
+			}
+		} catch (err) {
+			log.error(err, 'Error while processing jobs')
+			this.emit('error', errors.toError(err))
+		}
 	}
 
-	private async processJob<P>(
-		client: pg.ClientBase,
-		repository: JobRepository,
-		job: RunningJob<P>
-	): Promise<void> {
+	private async processJob<P>(job: RunningJob<P>): Promise<void> {
 		const handlers = this.handlers.get(job.type)
 
 		if (handlers) {
@@ -186,20 +196,24 @@ class Queue extends EventEmitter {
 			try {
 				const res = await Promise.all(handlers.map(h => h(job, context)))
 
-				const completedJob = await psql.withTx(client, async () => {
+				await this.clientFactory.withTx(async client => {
+					const repository = new JobRepository(client, this.config)
 					await repository.delete(job.id)
-					return repository.archive(
+					const completedJob = await repository.archive(
 						completeJob(job, res.length > 1 ? res : res[0])
 					)
+					this.emit('processed', completedJob)
+					log.debug('Job processed', completedJob)
 				})
-				log.debug('Job processed', completedJob)
 			} catch (err) {
-				log.error(err, 'Error while processing job')
-				await psql.withTx(client, async () => {
+				log.error(err, 'Error while processing job', job)
+				const failedJob = await this.clientFactory.withTx(async client => {
+					const repository = new JobRepository(client, this.config)
 					const error = errors.toError(err)
 					//TODO: move to job history if attempts > max
 					return repository.update(failJob(job, error))
 				})
+				this.emit('failed', failedJob, errors.toError(err))
 				throw err
 			}
 		}

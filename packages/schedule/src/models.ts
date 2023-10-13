@@ -9,6 +9,7 @@ export type ScheduledJob<P> = {
 	created: Date
 	schedule: Schedule
 	timezone?: string
+	nextRun?: Date
 	updated?: Date
 }
 

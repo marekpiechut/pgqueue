@@ -7,6 +7,7 @@ export type ClientFactory = {
 	acquire: () => Promise<pg.ClientBase>
 	release: (client: pg.ClientBase) => Promise<void>
 	withClient: <R>(fn: (client: pg.ClientBase) => Promise<R>) => Promise<R>
+	withTx: <R>(fn: (client: pg.ClientBase) => Promise<R>) => Promise<R>
 }
 
 const log = logger.create('core:psql')
@@ -33,6 +34,22 @@ export const poolConnectionFactory = (pool: pg.Pool): ClientFactory => {
 		withClient: fn => {
 			return pool.connect().then(client => {
 				return fn(client).finally(() => client.release())
+			})
+		},
+		withTx: fn => {
+			return pool.connect().then(client => {
+				return client
+					.query('BEGIN')
+					.then(() => fn(client))
+					.then(res => {
+						client.query('COMMIT')
+						return res
+					})
+					.catch(err => {
+						client.query('ROLLBACK')
+						throw err
+					})
+					.finally(() => client.release())
 			})
 		},
 	}
@@ -136,6 +153,19 @@ export const singleConnectionFactory = (client: pg.Client): ClientFactory => ({
 	},
 	withClient: fn => {
 		return fn(client)
+	},
+	withTx: fn => {
+		return client
+			.query('BEGIN')
+			.then(() => fn(client))
+			.then(res => {
+				client.query('COMMIT')
+				return res
+			})
+			.catch(err => {
+				client.query('ROLLBACK')
+				throw err
+			})
 	},
 })
 
