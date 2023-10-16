@@ -34,10 +34,15 @@ const toRow = (job: ScheduledJob<unknown>): ScheduledJobRow => ({
 	schedule: cron.serialize(job.schedule),
 })
 const toJob = <P>(row: ScheduledJobRow): ScheduledJob<P> => ({
-	...row,
-	state: row.state as ScheduledJob<P>['state'],
+	id: row.id,
+	type: row.type,
 	payload: row.payload as P,
+	created: row.created,
+	updated: row.updated,
+	started: row.started,
+	state: row.state as ScheduledJob<P>['state'],
 	schedule: cron.deserialize(row.schedule),
+	timezone: row.timezone,
 	nextRun: row.next_run,
 })
 
@@ -62,7 +67,9 @@ type ScheduledJobRunRow = {
 	error?: string | null
 }
 const runToRow = <R>(run: ScheduledJobRun<R>): ScheduledJobRunRow => ({
-	...run,
+	id: run.id,
+	type: run.type,
+	state: run.state,
 	ran_at: run.ranAt,
 	schedule_id: run.scheduleId,
 	result: (run as CompletedScheduledJob<R>).result ?? null,
@@ -71,7 +78,8 @@ const runToRow = <R>(run: ScheduledJobRun<R>): ScheduledJobRunRow => ({
 const runFromRow = <R>(row: ScheduledJobRunRow): ScheduledJobRun<R> => {
 	if (row.state === 'COMPLETED') {
 		return {
-			...row,
+			id: row.id,
+			type: row.type,
 			state: 'COMPLETED',
 			ranAt: row.ran_at,
 			scheduleId: row.schedule_id,
@@ -79,7 +87,8 @@ const runFromRow = <R>(row: ScheduledJobRunRow): ScheduledJobRun<R> => {
 		}
 	} else {
 		return {
-			...row,
+			id: row.id,
+			type: row.type,
 			state: 'FAILED',
 			ranAt: row.ran_at,
 			scheduleId: row.schedule_id,
@@ -175,7 +184,13 @@ export class ScheduledJobRepository {
 		const { client, config } = this
 		const { schema } = config
 		const res = await client.query(
-			`SELECT * FROM ${schema}.SCHEDULE WHERE state = 'WAITING' ORDER BY next_run LIMIT 1`
+			`SELECT * FROM ${schema}.SCHEDULE WHERE
+				state = 'WAITING'
+				OR state = 'RUNNING' AND (
+					lock_key IS NULL
+					OR lock_timeout < now()
+				)
+				ORDER BY next_run LIMIT 1`
 		)
 		if (res.rowCount === 0) return undefined
 		return toJob(res.rows[0])
@@ -194,6 +209,7 @@ export class ScheduledJobRepository {
 				SELECT *
 				FROM ${client.escapeIdentifier(schema)}.SCHEDULE
 				WHERE type = ANY($1)
+					AND next_run < now()
 					AND state = 'WAITING'
 					OR state = 'RUNNING' AND (
 						lock_key IS NULL

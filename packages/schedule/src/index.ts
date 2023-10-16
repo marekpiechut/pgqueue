@@ -127,6 +127,7 @@ class Scheduler extends events.TypedEventEmitter<Events> {
 	}
 
 	private onEvent = (async (notification: pg.Notification) => {
+		//TODO: this is executed also for jobs processed by this very node, maybe we should skip these?
 		const event = parseNotification(notification)
 		if (event.type === 'schedule:updated' && event.job.nextRun) {
 			this.scheduleWakeUp(event.job.nextRun)
@@ -141,25 +142,23 @@ class Scheduler extends events.TypedEventEmitter<Events> {
 	//TODO: we should probably skip wake-ups for jobs that don't have handlers registered
 	private scheduleWakeUp(newDate: Date): void {
 		if (!this.nextWakeUp || date.isBefore(newDate, this.nextWakeUp)) {
-			log.debug("Rescheduling scheduler's next wake up", newDate)
+			log.debug("Scheduler's next wake up", newDate)
 			if (this.wakeUpTimeout) {
 				clearTimeout(this.wakeUpTimeout)
 			}
 			const now = new Date()
 			const delay = Math.max(0, newDate.getTime() - now.getTime())
 			this.nextWakeUp = delay > 0 ? newDate : now
-			this.wakeUpTimeout = setTimeout(() => this.poll(), delay)
+			//Add a small random delay so we don't wake up all nodes at the same time and bomb the database
+			const random = Math.random() * 100
+			this.wakeUpTimeout = setTimeout(() => {
+				this.nextWakeUp = undefined
+				this.poll()
+			}, delay + random)
 		}
 	}
 
 	private async poll(): Promise<void> {
-		//TODO: poll until all jobs are processed
-		//TODO: fetch and update next wake up time when done
-		//maybe poll should union with next job, that is after now?
-		if (this.nextWakeUp && date.isPast(this.nextWakeUp)) {
-			this.nextWakeUp = undefined
-		}
-
 		//TODO: make configurable
 		const batchSize = 2
 		const jobs = await this.clientFactory.withTx(async client => {
@@ -172,6 +171,16 @@ class Scheduler extends events.TypedEventEmitter<Events> {
 
 		for (const job of jobs) {
 			await this.processJob(job)
+		}
+		if (jobs.length >= batchSize) {
+			await this.poll()
+		} else {
+			const next = await this.clientFactory.withClient(async client =>
+				new ScheduledJobRepository(client, this.config).fetchNext()
+			)
+			if (next?.nextRun) {
+				this.scheduleWakeUp(next?.nextRun)
+			}
 		}
 	}
 
