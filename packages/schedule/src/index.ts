@@ -151,10 +151,11 @@ class Scheduler extends events.TypedEventEmitter<Events> {
 			this.nextWakeUp = delay > 0 ? newDate : now
 			//Add a small random delay so we don't wake up all nodes at the same time and bomb the database
 			const random = Math.random() * 100
+			const timeout = delay + random
 			this.wakeUpTimeout = setTimeout(() => {
 				this.nextWakeUp = undefined
 				this.poll()
-			}, delay + random)
+			}, timeout)
 		}
 	}
 

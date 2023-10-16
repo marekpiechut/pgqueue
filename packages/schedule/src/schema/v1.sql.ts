@@ -8,7 +8,7 @@ type Config = {
 export default (config: Config): Evolution => ({
 	ups: [
 		`CREATE SCHEMA IF NOT EXISTS ${config.schema}`,
-		`CREATE TYPE ${config.schema}.JOB_STATE AS ENUM ('WAITING', 'RUNNING', 'PAUSED')`,
+		`CREATE TYPE ${config.schema}.JOB_STATE AS ENUM ('WAITING', 'RUNNING', 'PAUSED', 'FAILED', 'COMPLETED')`,
 		`CREATE TYPE ${config.schema}.JOB_RUN_STATE AS ENUM ('FAILED', 'COMPLETED')`,
 		// -- TABLES -- //
 		`CREATE TABLE ${config.schema}.SCHEDULE (
@@ -53,7 +53,7 @@ export default (config: Config): Evolution => ({
 			$$ LANGUAGE plpgsql;
 		`,
 		`CREATE OR REPLACE TRIGGER TR_SCHEDULE_UPDATED
-			AFTER INSERT OR DELETE OR UPDATE OF next_run, timezone
+			AFTER INSERT OR UPDATE OF next_run, timezone
 			ON ${config.schema}.SCHEDULE
 			FOR EACH ROW EXECUTE PROCEDURE
 			${config.schema}.SCHEDULE_UPDATED();

@@ -10,7 +10,6 @@ export const nextRun = (input: Schedule, options?: CronOptions): Date => {
 	validateTimeZone(options?.tz)
 
 	if (input instanceof Date) {
-		console.log('input is date', input, options?.tz)
 		return DateTime.fromJSDate(input)
 			.setZone(options?.tz, { keepLocalTime: true })
 			.toJSDate()

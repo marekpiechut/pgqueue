@@ -172,6 +172,8 @@ class Queue extends events.TypedEventEmitter<QueueEvents> {
 
 			log.debug(`Found ${jobs.length} jobs, batch size ${batchSize}`)
 			for (const job of jobs) {
+				//TODO add concurrency - run X jobs at once and loop
+				//Promise.all + limit concurrency
 				await this.processJob(job)
 			}
 			if (jobs.length === batchSize) {
