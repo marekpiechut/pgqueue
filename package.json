@@ -17,7 +17,7 @@
 	"private": true,
 	"scripts": {
 		"build": "lerna run build",
-		"watch": "lerna run watch --parallel",
+		"start": "lerna run start --parallel",
 		"clean": "lerna run clean",
 		"validate": "lerna run validate",
 		"typecheck": "lerna run typecheck",

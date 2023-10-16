@@ -20,14 +20,12 @@ const DEFAULT_SCHEMA = 'queues'
 type Config = {
 	schema?: string
 	nodeId?: string
-	pollInterval?: number
 	runMaintenance?: boolean
 }
 
 const DEFAULT_CONFIG = {
 	schema: DEFAULT_SCHEMA,
 	nodeId: ids.uuid(),
-	pollInterval: 30000,
 	runMaintenance: true,
 }
 type QueueEvents = {
