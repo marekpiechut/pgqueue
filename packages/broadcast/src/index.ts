@@ -31,6 +31,7 @@ export type BroadcastListener<P> = (event: Event<P>) => Promise<void> | void
  * all cluster nodes and don't require any persistence.
  */
 export class Broadcaster extends EventEmitter {
+	private started = false
 	private handlers: collections.Multimap<string, BroadcastListener<unknown>> =
 		new collections.Multimap()
 
@@ -56,6 +57,7 @@ export class Broadcaster extends EventEmitter {
 	public async start(): Promise<void> {
 		log.info('Starting broadcaster')
 		await this.persistentConnection.acquire(this.onConnection)
+		this.started = true
 		this.emit('started')
 	}
 
@@ -69,6 +71,7 @@ export class Broadcaster extends EventEmitter {
 			if (!force) throw err
 		} finally {
 			await this.persistentConnection.release(this.onConnection)
+			this.started = false
 		}
 
 		this.emit('stopped')
@@ -78,7 +81,7 @@ export class Broadcaster extends EventEmitter {
 		type: string,
 		listener: BroadcastListener<unknown>
 	): () => Promise<void> {
-		if (this.handlers.set(type, listener)) {
+		if (this.handlers.set(type, listener) && this.started) {
 			this.listen(type)
 		}
 		return () => {
@@ -90,7 +93,7 @@ export class Broadcaster extends EventEmitter {
 		type: string,
 		listener: BroadcastListener<unknown>
 	): Promise<void> {
-		if (this.handlers.delete(type, listener)) {
+		if (this.handlers.delete(type, listener) && this.started) {
 			await this.unlisten(type)
 		}
 	}
@@ -98,6 +101,7 @@ export class Broadcaster extends EventEmitter {
 	private onConnection = (async (client: pg.ClientBase): Promise<void> => {
 		log.info('Persistent connection established, subscribing to events')
 		client.on('notification', this.onEvent)
+
 		await this.listen(...this.handlers.keys())
 	}).bind(this)
 
@@ -148,6 +152,7 @@ export class Broadcaster extends EventEmitter {
 			await client.query(`LISTEN ${client.escapeIdentifier(type)}`)
 		}
 	}
+
 	private async unlisten(...types: string[]): Promise<void> {
 		log.debug('Unsubscribing from event types', types)
 
