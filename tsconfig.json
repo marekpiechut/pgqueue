@@ -1,0 +1,35 @@
+{
+	"compilerOptions": {
+		"target": "ES2021",
+		"lib": ["ES2021"],
+		"module": "ES2020",
+		"moduleResolution": "node",
+		"baseUrl": "src",
+		"sourceRoot": "src",
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+		"outDir": "lib",
+		"removeComments": true,
+		"isolatedModules": false,
+		"allowSyntheticDefaultImports": true,
+		"forceConsistentCasingInFileNames": true,
+
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"strictFunctionTypes": true,
+		"strictBindCallApply": true,
+		"strictPropertyInitialization": true,
+		"noImplicitThis": true,
+		"alwaysStrict": true,
+		"noUnusedParameters": true,
+
+		"noFallthroughCasesInSwitch": true,
+		"skipLibCheck": true,
+		"paths": {
+			"~/*": ["./*"]
+		}
+	},
+	"include": ["src"]
+}

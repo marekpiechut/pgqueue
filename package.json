@@ -1,0 +1,47 @@
+{
+	"name": "@dayone-labs/pgqueue",
+	"version": "0.1.0",
+	"type": "module",
+	"main": "lib/index.js",
+	"exports": {
+		".": "./src/index.ts",
+		"./schedules": "./src/schedules/index.ts",
+		"./queues": "./src/queues/index.ts",
+		"./worker": "./src/worker/index.ts",
+		"./scheduler": "./src/scheduler/index.ts",
+		"./stats": "./src/stats/index.ts"
+	},
+	"files": [
+		"lib"
+	],
+	"private": true,
+	"devDependencies": {
+		"@types/jest": "^29.5.12",
+		"@types/lodash": "~4.17.1",
+		"@types/luxon": "^3.4.2",
+		"@types/pg": "~8.11.6",
+		"@typescript-eslint/eslint-plugin": "^7.9.0",
+		"eslint": "^8.57.0",
+		"eslint-config-prettier": "^9.1.0",
+		"eslint-plugin-import": "^2.29.1",
+		"eslint-plugin-prettier": "^5.1.3",
+		"prettier": "^3.2.5",
+		"typescript": "~5.4.5",
+		"typescript-eslint": "^7.9.0"
+	},
+	"dependencies": {
+		"@dayone-labs/evolutions": "~0.2.0",
+		"cron-parser": "^4.9.0",
+		"date-fns": "~3.6.0",
+		"lodash": "~4.17.21",
+		"pg": "~8.11.5",
+		"uuidv7": "~1.0.0"
+	},
+	"scripts": {
+		"build": "tsc",
+		"clean": "shx rm -rf lib",
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint --max-warnings=0 --ext .ts,js src",
+		"validate": "bun run typecheck && bun run lint"
+	}
+}
