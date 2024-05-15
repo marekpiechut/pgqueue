@@ -28,7 +28,7 @@
 		"noFallthroughCasesInSwitch": true,
 		"skipLibCheck": true,
 		"paths": {
-			"~/*": ["./*"]
+			"~/*": ["*"]
 		}
 	},
 	"include": ["src"]

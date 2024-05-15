@@ -1,9 +1,6 @@
 # Built distribution files
-/lib
-/build
-
-*/lib
-*/build
+lib
+build
 
 # Logs
 
