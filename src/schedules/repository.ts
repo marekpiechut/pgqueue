@@ -38,14 +38,15 @@ export class ScheduleRepository extends Repository {
 		const res = await this.execute<ScheduleRow>(
 			`
 			INSERT INTO ${this.schema}.schedules
-			(id, tenant_id, name, queue, paused, retry, created, updated, schedule, payload_type, payload, target, timezone)
+			(id, tenant_id, name, type, queue, paused, retry_policy, schedule, payload_type, payload, target, timezone, created, updated)
 			VALUES
-			($1, $2, $3, $4, $5, $6, now(), now(), $7, $8, $9, $10, $11)
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), now())
 			RETURNING *
 		`,
 			schedule.id,
 			schedule.tenantId,
 			schedule.name,
+			schedule.type,
 			schedule.queue,
 			schedule.paused,
 			schedule.retryPolicy,

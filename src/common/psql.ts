@@ -38,6 +38,7 @@ export class DBConnection {
 		spec: DBConnection | pg.Pool | string
 	): DBConnection => {
 		if (typeof spec === 'string') {
+			console.log('Creating new connection', spec)
 			spec = new pg.Pool({ connectionString: spec })
 			return new DBConnection(spec)
 		} else if (spec instanceof DBConnection) {

@@ -162,14 +162,15 @@ export class QueueRepository extends Repository {
 		const res = await this.execute<QueueItemRow>(
 			`
 			insert into ${this.schema}.queue (
-				id, tenant_id, key, type, queue, created, state, delay, run_after, payload, payload_type, target, result, result_type, error, worker_data
+				id, tenant_id, key, type, queue, created, state, delay, run_after, payload, payload_type, target, result, result_type, error, worker_data, retry_policy
 			) values (
-				$1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+				$1, $2, $3, $4, $5, now(), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
 			) returning *
 		`,
 			item.id,
 			item.tenantId,
 			item.key,
+			item.type,
 			item.queue,
 			item.state,
 			item.delay,
@@ -220,6 +221,7 @@ export class QueueRepository extends Repository {
 			item.key,
 			item.delay,
 			item.target,
+			item.type,
 			item.tries,
 			item.runAfter,
 			item.result,

@@ -139,7 +139,7 @@ const apply = (schema: string): Evolution => ({
 			tenant_id VARCHAR(40) NOT NULL DEFAULT current_setting('pgqueue.current_tenant', false),
 			queue VARCHAR(255) NOT NULL,
 			type VARCHAR(40) NOT NULL,
-			name VARCHAR(255) NOT NULL,
+			name VARCHAR(255),
 			paused BOOLEAN DEFAULT FALSE,
 			retry_policy JSONB,
 			created TIMESTAMP NOT NULL DEFAULT now(),

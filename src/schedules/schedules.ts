@@ -37,6 +37,7 @@ export class Schedules implements ScheduleManager, TenantScheduleManager {
 
 	withTenant(tenantId: string): TenantScheduleManager {
 		const copy = new Schedules(this.repository.withTenant(tenantId))
+		copy.tenantId = tenantId
 		return copy
 	}
 
