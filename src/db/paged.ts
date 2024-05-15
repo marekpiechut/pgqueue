@@ -1,9 +1,9 @@
-import { first, last, take } from 'lodash'
+import { first, identity, last, take } from 'lodash'
 import pg from 'pg'
 import { PagedResult, UUID } from '~/common/models'
 import { QueryArg, SortOrder, countArguments } from '~/common/psql'
 
-export type PagedFetcher<T extends { id: UUID; created: Date }> = (
+export type PagedFetcher<T> = (
 	client: pg.ClientBase,
 	baseArgs: QueryArg[],
 	limit?: number,
@@ -12,10 +12,20 @@ export type PagedFetcher<T extends { id: UUID; created: Date }> = (
 	sort?: SortOrder
 ) => Promise<PagedResult<T>>
 
-export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
+export function createPagedFetcher<R extends { id: UUID; created: Date }, M>(
+	table: string,
+	baseCondition: string,
+	mapper: (row: R) => M
+): PagedFetcher<M>
+export function createPagedFetcher<R extends { id: UUID; created: Date }>(
 	table: string,
 	baseCondition: string
-): PagedFetcher<T> => {
+): PagedFetcher<R>
+export function createPagedFetcher<R extends { id: UUID; created: Date }, M>(
+	table: string,
+	baseCondition: string,
+	mapper?: (row: R) => M
+): PagedFetcher<M> {
 	const baseArgsCount = countArguments(baseCondition)
 	const queries = buildQueries(table, baseCondition, baseArgsCount + 1)
 	const countAll = async (
@@ -47,7 +57,7 @@ export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
 		after?: UUID | null | undefined | 'FIRST',
 		before?: UUID | null | undefined | 'LAST',
 		sort?: SortOrder
-	): Promise<PagedResult<T>> => {
+	): Promise<PagedResult<M>> => {
 		const totalPromise = countAll(client, baseArgs)
 		let itemsSkippedPromise
 
@@ -66,7 +76,7 @@ export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
 			)
 		}
 		let itemsPromise: Promise<{
-			rows: T[]
+			rows: R[]
 			hasNext: boolean
 			hasPrev: boolean
 		}>
@@ -76,7 +86,7 @@ export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
 			const total = await totalPromise
 			const lastPageSize = total % limit === 0 ? limit : total % limit
 			itemsPromise = client
-				.query<T>(sort === 'DESC' ? queries.fetchLastN : queries.fetchFirstN, [
+				.query<R>(sort === 'DESC' ? queries.fetchLastN : queries.fetchFirstN, [
 					...baseArgs,
 					lastPageSize,
 				])
@@ -87,7 +97,7 @@ export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
 				}))
 		} else if (after) {
 			itemsPromise = client
-				.query<T>(queries.fetchAfter, [...baseArgs, after, limit + 1])
+				.query<R>(queries.fetchAfter, [...baseArgs, after, limit + 1])
 				.then(res => {
 					const hasMore = res.rows.length > limit
 					const rows = take(res.rows, limit)
@@ -99,7 +109,7 @@ export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
 				})
 		} else if (before) {
 			itemsPromise = client
-				.query<T>(queries.fetchBefore, [...baseArgs, before, limit + 1])
+				.query<R>(queries.fetchBefore, [...baseArgs, before, limit + 1])
 				.then(res => {
 					const hasMore = res.rows.length > limit
 					const rows = take(res.rows, limit)
@@ -147,7 +157,7 @@ export const createPagedFetcher = <T extends { id: UUID; created: Date }>(
 				nextCursor: items.hasNext ? lastId : undefined,
 				endCursor: 'LAST',
 			},
-			items: items.rows,
+			items: items.rows.map(mapper || identity) as M[],
 		}
 	}
 }

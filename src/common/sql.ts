@@ -85,7 +85,7 @@ export function sql<R extends pg.QueryResultRow, M, O, V = SqlArg[]>(
 	}
 }
 
-export type DBConnectionSpec = pg.Pool | string | pg.ConnectionConfig | DB
+export type DBConnectionSpec = pg.Pool | string | DB
 export class DB {
 	protected pgPool: pg.Pool
 	protected tx?: pg.ClientBase
@@ -98,12 +98,10 @@ export class DB {
 	public static create(spec: DBConnectionSpec): DB {
 		if (spec instanceof DB) {
 			return spec
-		} else if (spec instanceof pg.Pool) {
-			return new DB(spec)
 		} else if (typeof spec === 'string') {
 			return new DB(new pg.Pool({ connectionString: spec }))
 		} else {
-			return new DB(new pg.Pool(spec))
+			return new DB(spec)
 		}
 	}
 
@@ -115,24 +113,38 @@ export class DB {
 		return copy
 	}
 
-	public withTx(tx: pg.ClientBase): DB {
+	public withTx(tx?: pg.ClientBase): DB {
 		const copy = new DB(this.pgPool)
 		copy.tenantId = this.tenantId
 		copy.tx = tx
 		return copy
 	}
 
+	public async transactional<T>(body: (db: DB) => Promise<T>): Promise<T> {
+		if (this.tx) {
+			return body(this)
+		} else {
+			return startTx(this.pgPool, async tx => {
+				return body(this.withTx(tx))
+			})
+		}
+	}
+
 	public async execute<R, M = R, O = M[], V = SqlArg[]>(
-		query: Query<R, M, O, V>
+		query: Query<R, M, O, V> | ((client: pg.ClientBase) => O)
 	): Promise<O> {
 		const releaseClient = !this.tx
 		const client = this.tx || (await this.pgPool.connect())
 
 		try {
 			this.setTenant(client)
-			const res = await client.query(query.text, query.values)
-			const mapped = res.rows.map(query.mapper)
-			return query.extractor(mapped)
+			if (typeof query === 'function') {
+				return await query(client)
+			} else {
+				const res = await client.query(query.text, query.values)
+				const mapped = res.rows.map(query.mapper)
+				return query.extractor(mapped)
+			}
 		} finally {
 			try {
 				this.clearTenant(client)

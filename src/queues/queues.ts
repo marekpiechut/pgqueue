@@ -1,12 +1,9 @@
+import pg from 'pg'
 import logger from '~/common/logger'
 import { PagedResult, TenantId, UUID } from '~/common/models'
-import {
-	DBConnection,
-	DBConnectionSpec,
-	SortOrder,
-	withTx,
-} from '~/common/psql'
+import { SortOrder } from '~/common/psql'
 import { nextRun } from '~/common/retry'
+import { DB, DBConnectionSpec } from '~/common/sql'
 import {
 	AnyHistory,
 	AnyQueueItem,
@@ -17,25 +14,23 @@ import {
 	WorkResult,
 	itemCompleted,
 	itemFailed,
+	itemRunFailed,
 	newConfig,
 	newItem,
 	updateConfig,
 } from './models'
-import { QueueHistoryRepository } from './repository/history'
-import { QueueRepository } from './repository/items'
+import * as queries from './queries'
 
 const log = logger('pgqueue:queues')
 
 export type QueuesConfig = {
 	schema: string
-	pollInterval?: number
-	batchSize?: number
 }
 
-export type QueueManager = {
+export interface QueueManager {
 	fetchQueues(): Promise<QueueConfig[]>
-	fetchQueue(name: string): Promise<QueueConfig | null>
-	fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | null>
+	fetchQueue(name: string): Promise<QueueConfig | undefined>
+	fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | undefined>
 	fetchItems(
 		queue: string,
 		limit?: number,
@@ -52,9 +47,10 @@ export type QueueManager = {
 	): Promise<PagedResult<AnyHistory>>
 	delete(id: UUID): Promise<AnyQueueItem>
 	withTenant(tenantId: TenantId): TenantQueueManager
+	withTx(tx: pg.ClientBase): this
 }
 
-export type TenantQueueManager = QueueManager & {
+export interface TenantQueueManager extends QueueManager {
 	configure(
 		queue: string,
 		options: Partial<Pick<QueueConfig, 'displayName' | 'paused'>>
@@ -70,60 +66,61 @@ export type TenantQueueManager = QueueManager & {
 
 export class Queues implements QueueManager, TenantQueueManager {
 	private tenantId: TenantId | undefined
-	private queueRepo: QueueRepository
-	private historyRepo: QueueHistoryRepository
 
 	private constructor(
-		private connection: DBConnection,
-		private config: QueuesConfig
-	) {
-		this.queueRepo = new QueueRepository(config.schema, connection.pool)
-		this.historyRepo = new QueueHistoryRepository(
-			config.schema,
-			connection.pool
-		)
-	}
+		private db: DB,
+		private config: QueuesConfig,
+		private queries: queries.Queries
+	) {}
 
-	public static create(
-		connectionSpec: DBConnectionSpec,
-		config: QueuesConfig
-	): QueueManager {
-		const connection = DBConnection.create(connectionSpec)
-		return new Queues(connection, config)
+	public static create(dbSpec: DBConnectionSpec, config: QueuesConfig): Queues {
+		const db = DB.create(dbSpec)
+		const sqls = queries.withSchema(config.schema)
+		return new Queues(db, config, sqls)
 	}
 
 	public withTenant(tenantId: TenantId): TenantQueueManager {
-		const copy = new Queues(this.connection, this.config) as this
+		const copy = new Queues(
+			this.db.withTenant(tenantId),
+			this.config,
+			this.queries
+		)
 		copy.tenantId = tenantId
-		copy.queueRepo = this.queueRepo.withTenant(tenantId)
-		copy.historyRepo = this.historyRepo.withTenant(tenantId)
 		return copy
+	}
+	public withTx(tx: pg.ClientBase): this {
+		return new Queues(this.db.withTx(tx), this.config, this.queries) as this
 	}
 
 	public async configure(
 		queue: string,
 		options: Pick<QueueConfig, 'displayName' | 'paused'>
 	): Promise<QueueConfig> {
-		let config = await this.queueRepo.getConfig(queue)
+		this.requireTenant()
+		const { db, queries } = this
+		let config = await db.execute(queries.fetchConfig(queue))
 		if (!config) {
 			config = newConfig(this.tenantId!, queue)
 		}
 		config = updateConfig(config, options)
-		return this.queueRepo.saveConfig(config)
+		return db.execute(queries.saveConfig(config))
 	}
 
 	async fetchQueues(): Promise<QueueConfig[]> {
-		return this.queueRepo.fetchQueues()
+		const { db, queries } = this
+		return db.execute(queries.fetchQueues())
 	}
 
-	async fetchQueue(name: string): Promise<QueueConfig | null> {
-		return this.queueRepo.fetchQueue(name)
+	async fetchQueue(name: string): Promise<QueueConfig | undefined> {
+		const { db, queries } = this
+		return db.execute(queries.fetchQueue(name))
 	}
 
-	async fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | null> {
+	async fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | undefined> {
+		const { db, queries } = this
 		const [current, history] = await Promise.all([
-			this.queueRepo.fetchItem(id),
-			this.historyRepo.fetchItem(id),
+			db.execute(queries.fetchItem(id)),
+			db.execute(queries.fetchHistory(id)),
 		])
 		return current || history
 	}
@@ -135,7 +132,10 @@ export class Queues implements QueueManager, TenantQueueManager {
 		before?: UUID | null | undefined | 'LAST',
 		sort?: SortOrder
 	): Promise<PagedResult<AnyQueueItem>> {
-		return this.queueRepo.fetchItems(queue, limit, after, before, sort)
+		const { db, queries } = this
+		return db.execute(client => {
+			return queries.fetchItemsPage(client, [queue], limit, after, before, sort)
+		})
 	}
 	async fetchHistory(
 		queue: string,
@@ -144,33 +144,48 @@ export class Queues implements QueueManager, TenantQueueManager {
 		before?: UUID | null | undefined | 'LAST',
 		sort?: SortOrder
 	): Promise<PagedResult<AnyHistory>> {
-		return this.historyRepo.fetchItems(queue, limit, after, before, sort)
+		const { db, queries } = this
+		return db.execute(client => {
+			return queries.fetchHistoryPage(
+				client,
+				[queue],
+				limit,
+				after,
+				before,
+				sort
+			)
+		})
 	}
 
 	async push<T>(item: NewQueueItem<T>): Promise<QueueItem<T>> {
-		if (!this.tenantId) {
-			throw new Error('TenantId is required to push new items')
-		}
+		this.requireTenant()
+		const { db, queries } = this
 
 		const queueItem = newItem(this.tenantId!, item)
 		log.debug('Pushing new item', queueItem)
-		return this.queueRepo.insert(queueItem)
+		return db.execute(queries.insert(queueItem))
 	}
 
 	async delete(
 		idOrItem: AnyQueueItem['id'] | AnyQueueItem
 	): Promise<AnyQueueItem> {
-		return this.queueRepo.delete(idOrItem)
+		const { db, queries } = this
+
+		if (typeof idOrItem !== 'string') {
+			idOrItem = idOrItem.id
+		}
+		return db.execute(queries.deleteItem(idOrItem))
 	}
 
 	async completed<T, R>(
 		item: QueueItem<T>,
 		result: WorkResult<R>
 	): Promise<void> {
-		await withTx(this.connection.pool, async tx => {
+		const { queries } = this
+		return this.db.transactional(async db => {
 			const history = itemCompleted(item, result)
-			await this.historyRepo.withTx(tx).save(history)
-			await this.queueRepo.withTx(tx).delete(item.id)
+			await db.execute(queries.insertHistory(history))
+			await db.execute(queries.deleteItem(item.id))
 		})
 	}
 
@@ -179,26 +194,31 @@ export class Queues implements QueueManager, TenantQueueManager {
 		result: WorkResult<R> | null | undefined,
 		error: string
 	): Promise<void> {
+		const { queries } = this
 		const retryAt = await this.getNextRetry(item)
 		if (retryAt) {
-			await this.queueRepo.update({
-				...item,
-				runAfter: retryAt,
-				state: 'PENDING',
-			})
+			const updated = itemRunFailed(item, retryAt, result, error)
+			await this.db.execute(queries.updateItem(updated))
 		} else {
-			await withTx(this.connection.pool, async tx => {
+			return this.db.transactional(async db => {
 				const history = itemFailed(item, result, error)
-				await this.historyRepo.withTx(tx).save(history)
-				await this.queueRepo.withTx(tx).delete(item.id)
+				await db.execute(queries.insertHistory(history))
+				await db.execute(queries.deleteItem(item.id))
 			})
 		}
 	}
 
 	private async getNextRetry(item: AnyQueueItem): Promise<Date | null> {
-		const config = await this.queueRepo.getConfig(item.queue)
+		const { db, queries } = this
+		const config = await db.execute(queries.fetchConfig(item.queue))
 		const delay = config?.retryPolicy || DEFAULT_QUEUE_CONFIG.retryPolicy
 
 		return nextRun(delay, item.tries)
+	}
+
+	private requireTenant(message?: string): void {
+		if (!this.tenantId) {
+			throw new Error(message || 'TenantId is required')
+		}
 	}
 }

@@ -6,6 +6,7 @@ import { applyEvolutions } from './db/schema'
 import * as queues from './queues'
 import * as schedules from './schedules'
 import * as stats from './stats'
+import { DB } from './common/sql'
 
 export * as cron from './common/cron'
 export { MimeType, MimeTypes } from './common/models'
@@ -64,7 +65,7 @@ export default {
 
 		const broadcaster = broadcast.Broadcaster.create(db)
 		const queueStats = stats.Stats.create(db, config)
-		const queueManager = queues.Queues.create(db, config)
+		const queueManager = queues.Queues.create(DB.create(pool), config)
 		const scheduleManager = schedules.Schedules.create(db, config)
 		return {
 			queues: queueManager,
