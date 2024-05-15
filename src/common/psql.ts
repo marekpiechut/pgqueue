@@ -35,15 +35,15 @@ export class DBConnection {
 	}
 
 	public static create = (
-		pool: DBConnection | pg.Pool | string
+		spec: DBConnection | pg.Pool | string
 	): DBConnection => {
-		if (typeof pool === 'string') {
-			pool = new pg.Pool({ connectionString: pool })
-			return new DBConnection(pool)
-		} else if (pool instanceof pg.Pool) {
-			return new DBConnection(pool)
+		if (typeof spec === 'string') {
+			spec = new pg.Pool({ connectionString: spec })
+			return new DBConnection(spec)
+		} else if (spec instanceof DBConnection) {
+			return spec
 		} else {
-			return pool
+			return new DBConnection(spec)
 		}
 	}
 
