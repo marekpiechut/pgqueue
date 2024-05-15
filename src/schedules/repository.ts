@@ -25,6 +25,20 @@ export class ScheduleRepository extends Repository {
 		return res.rows.map(scheduleFromRow)
 	}
 
+	async fetchAndLockRunnable(batchSize: number): Promise<Schedule<unknown>[]> {
+		const res = await this.execute<ScheduleRow>(
+			`
+			SELECT * FROM ${this.schema}.schedules
+			WHERE schedule <= now() AND NOT paused
+			LIMIT $1
+			ORDER BY schedule ASC
+			FOR UPDATE SKIP LOCKED
+		`,
+			[batchSize]
+		)
+		return res.rows.map(scheduleFromRow)
+	}
+
 	async fetchItem<T>(id: UUID): Promise<Schedule<T> | null> {
 		const res = await this.execute<ScheduleRow>(
 			`SELECT * FROM ${this.schema}.schedules WHERE id = $1`,

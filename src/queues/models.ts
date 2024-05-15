@@ -59,6 +59,7 @@ export type NewQueueItem<T> = {
 	key?: string
 	type: string
 	queue: string
+	scheduleId?: UUID
 	delay?: number
 	payload?: Buffer
 	payloadType?: MimeType

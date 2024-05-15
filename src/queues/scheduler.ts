@@ -5,6 +5,7 @@ import { DEFAULT_SCHEMA } from '~/db'
 import { AnyQueueItem, queueForWork } from './models'
 import { QueueRepository } from './repository/items'
 import { WorkQueueRepository } from './repository/work'
+import { RerunImmediately, pollingLoop } from '~/common/polling'
 
 const log = logger('pgqueue:scheduler')
 
@@ -50,7 +51,7 @@ export class Scheduler {
 	async start(): Promise<void> {
 		log.info('Starting scheduler', this.config)
 		this.abort = new AbortController()
-		loop(this.schedule, this.config.pollInterval, this.abort.signal)
+		pollingLoop(this.schedule, this.config.pollInterval, this.abort.signal)
 	}
 
 	async stop(): Promise<void> {
@@ -98,33 +99,4 @@ export class Scheduler {
 			return items.length >= batchSize
 		})
 	}).bind(this)
-}
-
-type RerunImmediately = boolean
-const loop = (
-	fn: () => Promise<RerunImmediately>,
-	interval: number,
-	abort: AbortSignal
-): void => {
-	let timeout: ReturnType<typeof setTimeout> | null = null
-	const onAbort = (): void => {
-		if (timeout) {
-			clearTimeout(timeout)
-			timeout = null
-		}
-	}
-	abort.addEventListener('abort', onAbort)
-	abort.removeEventListener('abort', onAbort)
-
-	const loop = async (): Promise<void> => {
-		let run = true
-		try {
-			while (run && !abort.aborted) {
-				run = await fn()
-			}
-		} finally {
-			timeout = setTimeout(loop, interval)
-		}
-	}
-	loop()
 }
