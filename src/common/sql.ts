@@ -14,7 +14,9 @@ export type Query<R, M = R, O = M[], V = SqlArg[]> = QueryConfig<R, M, O> & {
 }
 
 export const identity = <T>(a: T): T => a
+export const noopMapper = <T extends pg.QueryResultRow>(a: T): T => a
 export const first = <T>(a: T[]): T | undefined => a[0]
+export const returnNothing = (): void => {}
 export const firstRequired = <T>(a: T[]): T => {
 	const first = a[0]
 	if (!first) throw new Error('Result is empty')

@@ -4,6 +4,7 @@ import { PagedResult, TenantId, UUID } from '~/common/models'
 import { SortOrder } from '~/common/psql'
 import { nextRun } from '~/common/retry'
 import { DB, DBConnectionSpec } from '~/common/sql'
+import { DEFAULT_SCHEMA } from '~/db'
 import {
 	AnyHistory,
 	AnyQueueItem,
@@ -24,7 +25,10 @@ import * as queries from './queries'
 const log = logger('pgqueue:queues')
 
 export type QueuesConfig = {
-	schema: string
+	schema?: string
+}
+const DEFAULT_CONFIG = {
+	schema: DEFAULT_SCHEMA,
 }
 
 export interface QueueManager {
@@ -47,7 +51,7 @@ export interface QueueManager {
 	): Promise<PagedResult<AnyHistory>>
 	delete(id: UUID): Promise<AnyQueueItem>
 	withTenant(tenantId: TenantId): TenantQueueManager
-	withTx(tx: pg.ClientBase): this
+	withTx(tx: pg.ClientBase | DB): this
 }
 
 export interface TenantQueueManager extends QueueManager {
@@ -69,14 +73,15 @@ export class Queues implements QueueManager, TenantQueueManager {
 
 	private constructor(
 		private db: DB,
-		private config: QueuesConfig,
+		private config: QueuesConfig & typeof DEFAULT_CONFIG,
 		private queries: queries.Queries
 	) {}
 
 	public static create(dbSpec: DBConnectionSpec, config: QueuesConfig): Queues {
 		const db = DB.create(dbSpec)
-		const sqls = queries.withSchema(config.schema)
-		return new Queues(db, config, sqls)
+		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const sqls = queries.withSchema(mergedConfig.schema)
+		return new Queues(db, mergedConfig, sqls)
 	}
 
 	public withTenant(tenantId: TenantId): TenantQueueManager {
@@ -88,8 +93,11 @@ export class Queues implements QueueManager, TenantQueueManager {
 		copy.tenantId = tenantId
 		return copy
 	}
-	public withTx(tx: pg.ClientBase): this {
-		return new Queues(this.db.withTx(tx), this.config, this.queries) as this
+	public withTx(tx: pg.ClientBase | DB): this {
+		if (!(tx instanceof DB)) {
+			tx = this.db.withTx(tx)
+		}
+		return new Queues(tx, this.config, this.queries) as this
 	}
 
 	public async configure(

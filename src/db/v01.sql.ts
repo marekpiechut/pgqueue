@@ -156,7 +156,7 @@ const apply = (schema: string): Evolution => ({
 		);`,
 		`CREATE UNIQUE INDEX SCHEDULE_TENANT_NAME ON ${schema}.SCHEDULES (tenant_id, name);`,
 		//TODO: do we need index on queue name?
-		`CREATE INDEX SCHEDULE_NEXT_RUN ON ${schema}.SCHEDULES (next_run, created);`,
+		`CREATE INDEX SCHEDULE_NEXT_RUN ON ${schema}.SCHEDULES (next_run, paused);`,
 		`ALTER TABLE ${schema}.SCHEDULES ENABLE ROW LEVEL SECURITY;`,
 		`CREATE POLICY TENANT_POLICY on ${schema}.SCHEDULES USING (
 			tenant_id = current_setting('pgqueue.current_tenant', true)

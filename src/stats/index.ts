@@ -1,5 +1,5 @@
+export { Stats } from './stats'
+export { BasicStats, StatsHistogram } from './models'
+
 import { Stats } from './stats'
-
-export { Stats, BasicStats, StatsHistogram } from './stats'
-
 export default Stats

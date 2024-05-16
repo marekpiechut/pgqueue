@@ -1,3 +1,5 @@
+import { groupBy } from 'lodash'
+
 export class Multimap<K, V> {
 	private delegate = new Map<K, Array<V>>()
 
@@ -45,6 +47,22 @@ export class Multimap<K, V> {
 	}
 }
 
-export default {
-	Multimap,
+export const shuffleBy = <T>(items: T[], field: keyof T): T[] => {
+	const grouped = groupBy(items, field)
+	let done = false
+	const shuffled: T[] = []
+	do {
+		done = true
+		for (const value in grouped) {
+			const keyItems = grouped[value]
+			if (keyItems.length) {
+				const item = keyItems.shift()
+				if (item) {
+					shuffled.push(item)
+					done = false
+				}
+			}
+		}
+	} while (!done)
+	return shuffled
 }

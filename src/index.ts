@@ -1,12 +1,11 @@
 import pg from 'pg'
 import * as broadcast from './broadcast'
 import * as logger from './common/logger'
-import * as psql from './common/psql'
+import * as sql from './common/sql'
 import { applyEvolutions } from './db/schema'
 import * as queues from './queues'
 import * as schedules from './schedules'
 import * as stats from './stats'
-import { DB } from './common/sql'
 
 export * as cron from './common/cron'
 export { MimeType, MimeTypes } from './common/models'
@@ -18,7 +17,7 @@ export type Quickstart = {
 	start: () => Promise<void>
 	stop: () => Promise<void>
 	queues: queues.QueueManager
-	broadcaster: broadcast.Broadcaster
+	// broadcaster: broadcast.Broadcaster
 	stats: stats.Stats
 	schedules: schedules.ScheduleManager
 	scheduler: (pollInterval: number, batchSize: number) => queues.Scheduler
@@ -61,15 +60,15 @@ export default {
 		config: { schema: string }
 	): Promise<Quickstart> => {
 		validateConfig(config)
-		const db = psql.DBConnection.create(pool)
+		const db = sql.DB.create(pool)
 
-		const broadcaster = broadcast.Broadcaster.create(db)
+		// const broadcaster = broadcast.Broadcaster.create(db)
 		const queueStats = stats.Stats.create(db, config)
-		const queueManager = queues.Queues.create(DB.create(pool), config)
+		const queueManager = queues.Queues.create(db, config)
 		const scheduleManager = schedules.Schedules.create(db, config)
 		return {
 			queues: queueManager,
-			broadcaster: broadcaster,
+			// broadcaster: broadcaster,
 			stats: queueStats,
 			schedules: scheduleManager,
 			worker: (handler, workerConfig) =>
@@ -77,10 +76,10 @@ export default {
 			scheduler: (pollInterval, batchSize) =>
 				queues.Scheduler.create(db, { ...config, pollInterval, batchSize }),
 			start: async () => {
-				await broadcaster.start()
+				// await broadcaster.start()
 			},
 			stop: async () => {
-				await broadcaster.stop()
+				// await broadcaster.stop()
 			},
 		}
 	},

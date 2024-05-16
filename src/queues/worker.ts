@@ -1,9 +1,11 @@
-import { assignWith, pull } from 'lodash'
+import { pull } from 'lodash'
 import crypto from 'node:crypto'
 import { minutes } from '~/common/duration'
 import logger from '~/common/logger'
-import { DBConnection, DBConnectionSpec, withTx } from '~/common/psql'
+import { RerunImmediately, pollingLoop } from '~/common/polling'
 import { nextRun } from '~/common/retry'
+import { DB, DBConnectionSpec } from '~/common/sql'
+import { DEFAULT_SCHEMA } from '~/db'
 import {
 	AnyQueueItem,
 	AnyWorkResult,
@@ -14,20 +16,18 @@ import {
 	itemFailed,
 	itemRunFailed,
 } from './models'
-import { QueueHistoryRepository } from './repository/history'
-import { QueueRepository } from './repository/items'
-import { WorkQueueRepository } from './repository/work'
-import { RerunImmediately, pollingLoop } from '~/common/polling'
+import { Queries, withSchema } from './queries'
 
 const log = logger('pgqueue:worker')
 
 export type WorkerConfig = {
-	schema: string
 	nodeId: string
+	schema?: string
 	lockTimeout?: number
 }
 
 const DEFAULT_CONFIG = {
+	schema: DEFAULT_SCHEMA,
 	pollInterval: 1000,
 	batchSize: 10,
 	lockTimeout: minutes(2),
@@ -44,56 +44,38 @@ export class HandlerError extends Error {
 const startedWorkerNodes: string[] = []
 export type WorkerHandler = (item: AnyQueueItem) => Promise<AnyWorkResult>
 export class Worker {
-	private connection: DBConnection
-	private config: WorkerConfig & typeof DEFAULT_CONFIG
-	private handler: WorkerHandler
-	private workQueueRepo: WorkQueueRepository
-	private queueRepo: QueueRepository
-	private historyRepo: QueueHistoryRepository
 	private abort: AbortController | undefined
 
 	private constructor(
-		connection: DBConnection,
-		config: WorkerConfig,
-		handler: WorkerHandler
-	) {
-		this.handler = handler
-		this.connection = connection
-		this.workQueueRepo = new WorkQueueRepository(
-			config.schema,
-			this.connection.pool
-		)
-		this.queueRepo = new QueueRepository(config.schema, this.connection.pool)
-		this.historyRepo = new QueueHistoryRepository(
-			config.schema,
-			this.connection.pool
-		)
-
-		this.config = assignWith(DEFAULT_CONFIG, config, (objValue, srcValue) => {
-			return srcValue === undefined ? objValue : srcValue
-		})
-	}
+		private db: DB,
+		private queries: Queries,
+		private config: WorkerConfig & typeof DEFAULT_CONFIG,
+		private handler: WorkerHandler
+	) {}
 
 	static create(
 		db: DBConnectionSpec | string,
 		config: WorkerConfig,
 		handler: WorkerHandler
 	): Worker {
-		const connection = DBConnection.create(db)
-		return new Worker(connection, config, handler)
+		const connection = DB.create(db)
+		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const queries = withSchema(mergedConfig.schema)
+		return new Worker(connection, queries, mergedConfig, handler)
 	}
 
 	async start(): Promise<void> {
-		log.info('Starting worker', this.config)
-		if (startedWorkerNodes.includes(this.config.nodeId)) {
-			throw new Error(`Worker for nodeId ${this.config.nodeId} already started`)
+		const { db, queries, config } = this
+		log.info('Starting worker', config)
+		if (startedWorkerNodes.includes(config.nodeId)) {
+			throw new Error(`Worker for nodeId ${config.nodeId} already started`)
 		}
 
-		startedWorkerNodes.push(this.config.nodeId)
-		await this.workQueueRepo.unlockAll(this.config.nodeId)
+		startedWorkerNodes.push(config.nodeId)
+		await db.execute(queries.unlockAllWorkItems(config.nodeId))
 
 		this.abort = new AbortController()
-		pollingLoop(this.poll, this.config.pollInterval, this.abort.signal)
+		pollingLoop(this.poll, config.pollInterval, this.abort.signal)
 	}
 
 	async stop(): Promise<void> {
@@ -105,18 +87,21 @@ export class Worker {
 	}
 
 	private poll = (async (): Promise<RerunImmediately> => {
+		const { db, queries } = this
 		const { nodeId, batchSize, lockTimeout } = this.config
-		const items = await this.workQueueRepo.poll(nodeId, batchSize, lockTimeout)
+		const items = await db.execute(
+			queries.pollWorkQueue(nodeId, batchSize, lockTimeout)
+		)
 		for (const item of items) {
-			let job: QueueItem<unknown> | null = null
+			let job: QueueItem<unknown> | undefined
 			try {
-				job = await this.queueRepo.fetchItem(item.id)
-				if (job === null) {
-					log.error('Item not found, will not process item %s', item.id)
-				} else {
+				job = await db.execute(queries.fetchItem(item.id))
+				if (job) {
 					const result = await this.handler(job)
 					await this.completed(job, result)
 					log.debug('Item completed %s', item.id)
+				} else {
+					log.error('Item not found, will not process item %s', item.id)
 				}
 			} catch (error) {
 				if (job) {
@@ -135,7 +120,7 @@ export class Worker {
 				log.debug('Item failed %s - %s', item.id, error)
 			} finally {
 				try {
-					await this.workQueueRepo.delete(item)
+					await db.execute(queries.deleteWorkItem(item.id))
 				} catch (error) {
 					log.error('Failed to delete work queue item %s', item.id)
 				}
@@ -149,10 +134,11 @@ export class Worker {
 		item: QueueItem<T>,
 		result: WorkResult<R>
 	): Promise<void> {
-		await withTx(this.connection.pool, async tx => {
+		const { db, queries } = this
+		await db.transactional(async withTx => {
 			const history = itemCompleted(item, result)
-			await this.historyRepo.withTx(tx).save(history)
-			await this.queueRepo.withTx(tx).delete(item.id)
+			await withTx.execute(queries.insertHistory(history))
+			await withTx.execute(queries.deleteItem(item.id))
 		})
 	}
 
@@ -161,23 +147,25 @@ export class Worker {
 		result: WorkResult<R> | null | undefined,
 		error: string
 	): Promise<void> {
+		const { db, queries } = this
 		const retryAt = await this.getNextRetry(item)
 		if (retryAt) {
 			log.debug('Item %s will retry at %s', item.id, retryAt)
 			const updated = itemRunFailed(item, retryAt, result, error)
-			await this.queueRepo.update(updated)
+			await db.execute(queries.updateItem(updated))
 		} else {
 			log.debug('Item %s exceeded retry limit, fail', item.id)
-			return withTx(this.connection.pool, async tx => {
+			await db.transactional(async withTx => {
 				const history = itemFailed(item, result, error)
-				await this.historyRepo.withTx(tx).save(history)
-				await this.queueRepo.withTx(tx).delete(item.id)
+				await withTx.execute(queries.insertHistory(history))
+				await withTx.execute(queries.deleteItem(item.id))
 			})
 		}
 	}
 
 	private async getNextRetry(item: AnyQueueItem): Promise<Date | null> {
-		const config = await this.queueRepo.getConfig(item.queue)
+		const { db, queries } = this
+		const config = await db.execute(queries.fetchConfig(item.queue))
 		const retry = config?.retryPolicy || DEFAULT_QUEUE_CONFIG.retryPolicy
 		return nextRun(retry, item.tries + 1)
 	}

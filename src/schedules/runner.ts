@@ -1,49 +1,44 @@
+import { shuffleBy } from '~/common/collections'
 import logger from '~/common/logger'
-import { DBConnection, DBConnectionSpec, withTx } from '~/common/psql'
-import Queues from '~/queues'
-import { ScheduleRepository } from './repository'
-import { SchedulesConfig } from './schedules'
 import { pollingLoop } from '~/common/polling'
-import { groupBy } from 'lodash'
-import { Schedule } from './models'
+import { DB, DBConnectionSpec } from '~/common/sql'
+import { DEFAULT_SCHEMA } from '~/db'
+import Queues from '~/queues'
+import { executeSchedule, executedSuccessfully } from './models'
+import { Queries, withSchema } from './queries'
 
 const log = logger('pgqueue:schedules:runner')
 
 export type ScheduleRunnerConfig = {
 	pollInterval?: number
 	batchSize?: number
-	schema: string
+	schema?: string
 }
 const DEFAULT_CONFIG = {
+	schema: DEFAULT_SCHEMA,
 	batchSize: 100,
 	pollInterval: 10000,
 }
 
 export class ScheduleRunner {
-	private config: ScheduleRunnerConfig & typeof DEFAULT_CONFIG
 	private abort?: AbortController
-	private connection: DBConnection
-	private repository: ScheduleRepository
-	private queues: Queues
 
 	private constructor(
-		connection: DBConnection,
-		queues: Queues,
-		config: SchedulesConfig
-	) {
-		this.config = { ...DEFAULT_CONFIG, ...config }
-		this.connection = connection
-		this.repository = new ScheduleRepository(config.schema, connection.pool)
-		this.queues = queues
-	}
+		private db: DB,
+		private queries: Queries,
+		private config: ScheduleRunnerConfig & typeof DEFAULT_CONFIG,
+		private queues: Queues
+	) {}
 
 	public static create(
 		connectionSpec: DBConnectionSpec,
 		queues: Queues,
 		config: ScheduleRunnerConfig
 	): ScheduleRunner {
-		const connection = DBConnection.create(connectionSpec)
-		return new ScheduleRunner(connection, queues, config)
+		const connection = DB.create(connectionSpec)
+		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const queries = withSchema(mergedConfig.schema)
+		return new ScheduleRunner(connection, queries, mergedConfig, queues)
 	}
 
 	async start(): Promise<void> {
@@ -60,37 +55,26 @@ export class ScheduleRunner {
 	}
 
 	private run = async (): Promise<boolean> => {
-		const schedules = await this.repository.fetchAndLockRunnable(
-			this.config.batchSize
+		const { db, queries, config } = this
+		const schedules = await db.execute(
+			queries.fetchAndLockRunnable(this.config.batchSize)
 		)
 
 		//Distribute by tenant, so no one tenant can block the others
-		const byTenant = groupBy(schedules, 'tenantId')
-		let done = false
-		const shuffled = []
-		do {
-			done = true
-			for (const tenantId in byTenant) {
-				const tenantItems = byTenant[tenantId]
-				if (tenantItems.length) {
-					const next = tenantItems.shift()
-					if (next) {
-						shuffled.push(next)
-						done = false
-					}
-				}
-			}
-		} while (!done)
+		const shuffled = shuffleBy(schedules, 'tenantId')
 
 		await Promise.all(
 			shuffled.map(async schedule => {
 				try {
-					withTx(this.connection.pool, async tx => {
-						await this.queues.withTenant(schedule.tenantId).withTx(tx).push({
-							queue: schedule.queue,
-							type: schedule.type,
-							scheduleId: schedule.id,
-						})
+					db.transactional(async withTx => {
+						const queueItem = executeSchedule(schedule)
+						await this.queues
+							.withTx(withTx)
+							.withTenant(schedule.tenantId)
+							.push(queueItem)
+
+						const nextRun = executedSuccessfully(schedule)
+						await withTx.execute(queries.update(nextRun))
 					})
 				} catch (err) {
 					log.error(err, 'Error pushing schedule to queue', {
@@ -99,6 +83,6 @@ export class ScheduleRunner {
 				}
 			})
 		)
-		return schedules.length >= this.config.batchSize
+		return schedules.length >= config.batchSize
 	}
 }

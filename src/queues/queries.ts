@@ -1,31 +1,35 @@
 import { first } from 'lodash'
+import { Duration, toSeconds } from '~/common/duration'
 import { RetryPolicy } from '~/common/retry'
+import { firstRequired, noopMapper, returnNothing, sql } from '~/common/sql'
 import {
 	QueueConfigRow,
 	QueueHistoryRow,
 	QueueItemRow,
+	WorkItemRow,
 	createPagedFetcher,
 } from '../db'
 import {
 	AnyQueueItem,
+	NewWorkItem,
 	QueueConfig,
 	QueueHistory,
 	QueueHistoryState,
 	QueueItem,
 	QueueItemState,
+	WorkItem,
 } from './models'
-import { firstRequired, sql } from '~/common/sql'
 
 export type Queries = ReturnType<typeof withSchema>
 export const withSchema = (schema: string) =>
 	({
-		fetchConfig: (queue: string) => sql(schema, deserializeConfig, first)`
+		fetchConfig: (queue: string) => sql(schema, rowToConfig, first)`
 			SELECT * FROM {{schema}}.queue_config
 			WHERE queue = ${queue}
 		`,
 		saveConfig: (config: QueueConfig) => sql(
 			schema,
-			deserializeConfig,
+			rowToConfig,
 			firstRequired
 		)`
 			INSERT INTO {{schema}}.queue_config
@@ -35,7 +39,7 @@ export const withSchema = (schema: string) =>
 			SET paused=${config.paused}, retry_policy=${config.retryPolicy}, updated=now(), version=queue_config.version+1
 			RETURNING *
 		`,
-		fetchQueues: () => sql(schema, deserializeConfig)`
+		fetchQueues: () => sql(schema, rowToConfig)`
 			WITH q AS (
 				SELECT DISTINCT tenant_id, queue FROM {{schema}}.queue
 				UNION
@@ -46,7 +50,7 @@ export const withSchema = (schema: string) =>
 			ON q.tenant_id=c.tenant_id AND q.queue=c.queue
 			ORDER BY q.tenant_id, q.queue
 		`,
-		fetchQueue: (name: string) => sql(schema, deserializeConfig, first)`
+		fetchQueue: (name: string) => sql(schema, rowToConfig, first)`
 			WITH q AS (
 				SELECT DISTINCT tenant_id, queue FROM {{schema}}.queue
 				UNION
@@ -57,7 +61,7 @@ export const withSchema = (schema: string) =>
 			ON q.tenant_id=c.tenant_id AND q.queue=c.queue
 			WHERE q.queue = ${name}
 		`,
-		fetchAndLockDueItems: (limit: number = 100) => sql(schema, deserializeItem)`
+		fetchAndLockDueItems: (limit: number = 100) => sql(schema, rowToItem)`
 			SELECT *
 			FROM {{schema}}.QUEUE
 			WHERE state='PENDING' or state='RETRY' AND (run_after IS NULL OR run_after <= now())
@@ -66,24 +70,20 @@ export const withSchema = (schema: string) =>
 		`,
 		markAs: (state: QueueItemState, items: AnyQueueItem['id'][]) => sql(schema)`
 			UPDATE {{schema}}.queue
-			SET state=$${state}, version=version+1, updated=now()
+			SET state=${state}, version=version+1, updated=now()
 			WHERE id = ANY(${items})
 		`,
-		fetchItem: (id: AnyQueueItem['id']) => sql(schema, deserializeItem, first)`
+		fetchItem: (id: AnyQueueItem['id']) => sql(schema, rowToItem, first)`
 			SELECT * FROM {{schema}}.queue WHERE id = ${id}
 		`,
 		deleteItem: (id: AnyQueueItem['id']) => sql(
 			schema,
-			deserializeItem,
+			rowToItem,
 			firstRequired
 		)`
 			DELETE FROM {{schema}}.queue WHERE id = ${id} RETURNING *
 		`,
-		insert: <T>(item: QueueItem<T>) => sql(
-			schema,
-			deserializeItem<T>,
-			firstRequired
-		)`
+		insert: <T>(item: QueueItem<T>) => sql(schema, rowToItem<T>, firstRequired)`
 			INSERT INTO {{schema}}.queue (
 				id, tenant_id, key, type, queue, created, state, delay, run_after, payload, payload_type, target, result, result_type, error, worker_data
 			) values (
@@ -107,7 +107,7 @@ export const withSchema = (schema: string) =>
 		`,
 		updateItem: <T>(item: QueueItem<T>) => sql(
 			schema,
-			deserializeItem<T>,
+			rowToItem<T>,
 			firstRequired
 		)`
 			UPDATE {{schema}}.queue SET
@@ -133,11 +133,11 @@ export const withSchema = (schema: string) =>
 		fetchItemsPage: createPagedFetcher(
 			`${schema}.queue`,
 			'queue=$1',
-			deserializeItem
+			rowToItem
 		),
 		fetchHistory: <T, R>(id: QueueHistory<T, R>['id']) => sql(
 			schema,
-			deserializeHistory,
+			rowToHistory,
 			first
 		)`
 			SELECT * FROM {{schema}}.queue_history WHERE id = ${id}
@@ -145,11 +145,11 @@ export const withSchema = (schema: string) =>
 		fetchHistoryPage: createPagedFetcher(
 			`${schema}.queue_history`,
 			'queue=$1',
-			deserializeHistory
+			rowToHistory
 		),
 		insertHistory: <T, R>(history: QueueHistory<T, R>) => sql(
 			schema,
-			deserializeHistory,
+			rowToHistory,
 			firstRequired
 		)`
 		INSERT INTO {{schema}}.queue_history (
@@ -192,9 +192,65 @@ export const withSchema = (schema: string) =>
 			${history.error}
 		) RETURNING *
 		`,
+		pollWorkQueue: (
+			nodeId: string,
+			batchSize: number,
+			lockTimeout: Duration
+		) => sql(schema, rowToWorkItem)`
+		WITH next AS (
+				SELECT *
+				FROM {{schema}}.WORK_QUEUE
+				WHERE lock_key IS NULL OR lock_timeout < now()
+				ORDER BY created, batch_order ASC
+				LIMIT ${batchSize} FOR UPDATE SKIP LOCKED
+		)
+		UPDATE {{schema}}.WORK_QUEUE as updated
+		SET lock_key = ${nodeId},
+				started = now(),
+				version = updated.version + 1,
+				lock_timeout = (now() + (${toSeconds(lockTimeout)} || ' seconds')::INTERVAL)
+		FROM next
+		WHERE updated.id = next.id
+		RETURNING updated.*
+		`,
+		updateWorkQueue: (item: WorkItem) => sql(
+			schema,
+			rowToWorkItem,
+			firstRequired
+		)`
+		UPDATE {{schema}}.WORK_QUEUE
+			SET
+				updated = now(),
+				started = ${item.started},
+				lock_timeout = ${item.lockTimeout},
+				version = version + 1
+			WHERE id = ${item.id} AND version = ${item.version}
+			RETURNING *
+		`,
+		insertWorkItems: (items: NewWorkItem[]) => sql(
+			schema,
+			noopMapper,
+			returnNothing
+		)`
+			INSERT INTO {{schema}}.WORK_QUEUE (id, tenant_id, batch_order)
+			SELECT * FROM UNNEST(
+				${items.map(i => i.id)}::uuid[],
+			 	${items.map(i => i.tenantId)}::varchar[],
+				${items.map(i => i.batchOrder)}::integer[]
+			) ON CONFLICT DO NOTHING`,
+		deleteWorkItem: (id: WorkItem['id']) => sql(schema, rowToWorkItem, first)`
+			DELETE FROM {{schema}}.WORK_QUEUE WHERE id = ${id} RETURNING *
+		`,
+		unlockAllWorkItems: (nodeId: string) => sql(schema)`
+			UPDATE {{schema}}.WORK_QUEUE
+			SET lock_key = NULL,
+					lock_timeout = NULL,
+					started = NULL
+			WHERE lock_key = ${nodeId}
+		`,
 	}) as const
 
-const deserializeItem = <T>(row: QueueItemRow): QueueItem<T> => {
+const rowToItem = <T>(row: QueueItemRow): QueueItem<T> => {
 	return {
 		id: row.id,
 		tenantId: row.tenant_id,
@@ -220,16 +276,14 @@ const deserializeItem = <T>(row: QueueItemRow): QueueItem<T> => {
 	}
 }
 
-const deserializeConfig = (row: QueueConfigRow): QueueConfig => ({
+const rowToConfig = (row: QueueConfigRow): QueueConfig => ({
 	id: row.queue,
 	tenantId: row.tenant_id,
 	paused: row.paused || false,
 	retryPolicy: row.retryPolicy as RetryPolicy,
 })
 
-const deserializeHistory = <T, R>(
-	row: QueueHistoryRow
-): QueueHistory<T, R> => ({
+const rowToHistory = <T, R>(row: QueueHistoryRow): QueueHistory<T, R> => ({
 	id: row.id,
 	tenantId: row.tenant_id,
 	key: row.key,
@@ -248,4 +302,16 @@ const deserializeHistory = <T, R>(
 	target: row.target as T,
 	workerData: row.worker_data as R,
 	error: row.error,
+})
+
+const rowToWorkItem = (row: WorkItemRow): WorkItem => ({
+	id: row.id,
+	version: row.version,
+	tenantId: row.tenant_id,
+	created: row.created,
+	batchOrder: row.batch_order,
+	updated: row.updated,
+	started: row.started,
+	lockKey: row.lock_key,
+	lockTimeout: row.lock_timeout,
 })
