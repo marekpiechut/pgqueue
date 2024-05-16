@@ -1,4 +1,4 @@
-import { Query, firstRequired, noopMapper, sql } from '~/common/sql'
+import { Query, firstRequired, sql } from '~/common/sql'
 import { QueueItemState } from '~/queues'
 import { BasicStats, StatsHistogram } from './models'
 
