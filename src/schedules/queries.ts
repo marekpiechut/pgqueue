@@ -1,7 +1,7 @@
-import cron from '~/common/cron'
 import { RetryPolicy } from '~/common/retry'
 import { first, firstRequired, sql } from '~/common/sql'
 import { ScheduleRow } from '~/db'
+import cron from './cron'
 import { Schedule } from './models'
 
 export type Queries = ReturnType<typeof withSchema>

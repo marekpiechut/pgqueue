@@ -105,6 +105,66 @@ export const validateTimeZone = (input?: string): void => {
 	}
 }
 
+type CronGranularity =
+	| 'seconds'
+	| 'minutes'
+	| 'hours'
+	| 'days'
+	| 'months'
+	| 'years'
+type CronSimulation = {
+	granularity: CronGranularity
+	runs: Date[]
+}
+export const simulate = (
+	schedule: ScheduleConfig,
+	counts: Partial<Record<CronGranularity, number>>,
+	options?: { tz?: string }
+): CronSimulation => {
+	const startAt = schedule?.startAt ?? new Date()
+	const runs: Date[] = []
+	const granularity =
+		schedule.type === 'basic'
+			? schedule.interval
+			: guessGranularity(schedule.cron)
+
+	const count = counts[granularity] || 10
+	let current = startAt
+	for (let i = 0; i < count; i++) {
+		current = nextRun({ ...schedule, startAt: current }, { tz: options?.tz })
+		runs.push(current)
+	}
+	return {
+		granularity,
+		runs,
+	}
+}
+
+const cronMacrosGranularity: Record<string, CronGranularity> = {
+	'@yearly': 'months',
+	'@annually': 'months',
+	'@monthly': 'days',
+	'@weekly': 'days',
+	'@daily': 'hours',
+	'@hourly': 'minutes',
+}
+const cronFieldGranularity: CronGranularity[] = [
+	'minutes',
+	'hours',
+	'hours',
+	'months',
+	'years',
+	'years',
+]
+const guessGranularity = (expression: string): CronGranularity => {
+	if (expression in cronMacrosGranularity) {
+		return cronMacrosGranularity[expression]
+	}
+
+	const starIdx = expression.split(' ').findIndex(part => part.startsWith('*'))
+	return cronFieldGranularity[starIdx] || 'days'
+}
+
 export default {
 	nextRun,
 	serialize,

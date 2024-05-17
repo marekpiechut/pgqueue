@@ -151,7 +151,7 @@ const apply = (schema: string): Evolution => ({
 			payload_type VARCHAR(255),
 			target JSONB,
 			schedule VARCHAR(64),
-			timezone VARCHAR(32),
+			timezone VARCHAR(32) NOT NULL,
 			PRIMARY KEY(id)
 		);`,
 		`CREATE UNIQUE INDEX SCHEDULE_TENANT_NAME ON ${schema}.SCHEDULES (tenant_id, name);`,
@@ -164,6 +164,7 @@ const apply = (schema: string): Evolution => ({
 		`CREATE POLICY WORKER_POLICY on ${schema}.SCHEDULES TO QUEUE_WORKER USING (TRUE);`,
 	],
 	downs: [
+		`DROP TABLE IF EXISTS ${schema}.WORK_QUEUE;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE_CONFIG;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE_HISTORY;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE;`,

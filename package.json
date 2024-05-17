@@ -15,11 +15,13 @@
 	],
 	"private": true,
 	"devDependencies": {
+		"@types/chai": "^4.3.16",
 		"@types/jest": "^29.5.12",
 		"@types/lodash": "~4.17.1",
 		"@types/luxon": "^3.4.2",
 		"@types/pg": "~8.11.6",
 		"@typescript-eslint/eslint-plugin": "^7.9.0",
+		"chai": "^5.1.1",
 		"eslint": "^8.57.0",
 		"eslint-config-prettier": "^9.1.0",
 		"eslint-plugin-import": "^2.29.1",
@@ -28,6 +30,7 @@
 		"prettier": "^3.2.5",
 		"shx": "^0.3.4",
 		"tsc-alias": "^1.8.10",
+		"tsx": "^4.10.4",
 		"typescript": "~5.4.5",
 		"typescript-eslint": "^7.9.0"
 	},
@@ -43,8 +46,10 @@
 		"build": "tsc && tsc-alias",
 		"clean": "shx rm -rf lib",
 		"typecheck": "tsc --noEmit",
+		"test": "tsx --test ./src/**/*.test.ts",
+		"test:watch": "tsx --test --watch ./src/**/*.test.ts",
 		"lint": "eslint --max-warnings=0 --ext .ts,js src",
-		"validate": "npm run typecheck && npm run lint",
+		"validate": "npm run typecheck && npm run lint && npm run test",
 		"prepare": "husky"
 	}
 }

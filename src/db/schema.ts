@@ -92,7 +92,7 @@ export type ScheduleRow = {
 	payload_type?: string
 	payload?: Buffer
 	target?: Json
-	timezone?: string
+	timezone: string
 }
 
 export const DEFAULT_SCHEMA = 'queues'

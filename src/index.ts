@@ -7,7 +7,6 @@ import * as queues from './queues'
 import * as schedules from './schedules'
 import * as stats from './stats'
 
-export * as cron from './common/cron'
 export { MimeType, MimeTypes } from './common/models'
 
 export type Config = {

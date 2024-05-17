@@ -1,8 +1,10 @@
 import { uuidv7 } from 'uuidv7'
-import cron, { ScheduleConfig } from '~/common/cron'
+import cron, { ScheduleConfig } from './cron'
 import { MimeType, TenantId, UUID } from '~/common/models'
 import { RetryPolicy } from '~/common/retry'
 import { NewQueueItem } from '~/queues'
+
+export const DEFAULT_TIMEZONE = 'UTC'
 
 export type NewSchedule<T> = {
 	name: string
@@ -24,6 +26,7 @@ export type Schedule<T> = NewSchedule<T> & {
 	created: Date
 	updated?: Date
 	nextRun?: Date
+	timezone: string
 }
 
 export const newSchedule = <T>(
@@ -36,6 +39,7 @@ export const newSchedule = <T>(
 	version: 0,
 	tries: 0,
 	created: new Date(),
+	timezone: input.timezone || DEFAULT_TIMEZONE,
 })
 
 export const executeSchedule = <T>(schedule: Schedule<T>): NewQueueItem<T> => ({
