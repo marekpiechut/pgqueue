@@ -39,6 +39,7 @@ export const newSchedule = <T>(
 	version: 0,
 	tries: 0,
 	created: new Date(),
+	nextRun: cron.nextRun(input.schedule, { tz: input.timezone }),
 	timezone: input.timezone || DEFAULT_TIMEZONE,
 })
 
@@ -46,6 +47,7 @@ export const executeSchedule = <T>(schedule: Schedule<T>): NewQueueItem<T> => ({
 	queue: schedule.queue,
 	type: schedule.type,
 	scheduleId: schedule.id,
+	target: schedule.target,
 	payload: schedule.payload,
 	payloadType: schedule.payloadType,
 	retryPolicy: schedule.retryPolicy,

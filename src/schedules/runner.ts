@@ -32,12 +32,12 @@ export class ScheduleRunner {
 
 	public static create(
 		connectionSpec: DBConnectionSpec,
-		queues: Queues,
 		config: ScheduleRunnerConfig
 	): ScheduleRunner {
 		const connection = DB.create(connectionSpec)
 		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
 		const queries = withSchema(mergedConfig.schema)
+		const queues = Queues.create(connectionSpec, mergedConfig)
 		return new ScheduleRunner(connection, queries, mergedConfig, queues)
 	}
 
@@ -59,6 +59,8 @@ export class ScheduleRunner {
 		const schedules = await db.execute(
 			queries.fetchAndLockRunnable(this.config.batchSize)
 		)
+
+		log.debug('Fetched schedules to run', { count: schedules.length })
 
 		//Distribute by tenant, so no one tenant can block the others
 		const shuffled = shuffleBy(schedules, 'tenantId')

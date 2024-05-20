@@ -1,9 +1,12 @@
 import * as pg from 'pg'
+import logger from '~/common/logger'
 import { TenantId } from '~/common/models'
 import { DB, DBConnectionSpec } from '~/common/sql'
 import { DEFAULT_SCHEMA } from '~/db'
 import { NewSchedule, Schedule, newSchedule } from './models'
 import { Queries, withSchema } from './queries'
+
+const log = logger('pgqueue:schedules')
 
 export type ScheduleManager = {
 	withTenant(tenantId: TenantId): TenantScheduleManager
@@ -70,6 +73,7 @@ export class Schedules implements ScheduleManager, TenantScheduleManager {
 		this.requireTenant()
 		const { db, queries } = this
 		const schedule = newSchedule(this.tenantId!, input)
+		log.info('Creating schedule', schedule)
 		return db.execute(queries.insert(schedule))
 	}
 	private requireTenant(message?: string): void {

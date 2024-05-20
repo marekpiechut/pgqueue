@@ -84,7 +84,7 @@ export class Stats {
 		const { db, queries } = this
 		const res = await db.execute(queries.queueHistogram(queues, days))
 
-		const firstDay = subDays(startOfDay(new Date()), days)
+		const firstDay = subDays(startOfDay(new Date()), days - 1)
 		const byQueue = groupBy(res, 'queue')
 
 		return queues.reduce(

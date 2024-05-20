@@ -20,9 +20,9 @@ export const withSchema = (schema: string) =>
 		//TODO: skip already scheduled!!!
 		fetchAndLockRunnable: (batchSize: number) => sql(schema, rowToSchedule)`
 			SELECT * FROM {{schema}}.schedules
-			WHERE next_run IS NOT NULL AND next_run <= now() AND NOT paused
-			LIMIT ${batchSize}
+			WHERE next_run IS NOT NULL AND next_run <= now() AND paused IS NOT TRUE
 			ORDER BY schedule ASC
+			LIMIT ${batchSize}
 			FOR UPDATE SKIP LOCKED
 		`,
 		insert: <T>(schedule: Schedule<T>) => sql(
@@ -31,7 +31,7 @@ export const withSchema = (schema: string) =>
 			firstRequired
 		)`
 			INSERT INTO {{schema}}.schedules
-			(id, tenant_id, name, type, queue, paused, retry_policy, schedule, payload_type, payload, target, timezone, created)
+			(id, tenant_id, name, type, queue, paused, retry_policy, schedule, payload_type, payload, target, timezone, next_run, created)
 			VALUES
 			(
 				${schedule.id}, 
@@ -46,6 +46,7 @@ export const withSchema = (schema: string) =>
 				${schedule.payload}, 
 				${schedule.target}, 
 				${schedule.timezone}, 
+				${schedule.nextRun}, 
 				now()
 			) RETURNING *`,
 		update: <T>(schedule: Schedule<T>) => sql(
@@ -87,5 +88,6 @@ export const rowToSchedule = <T>(row: ScheduleRow): Schedule<T> => ({
 	payload: row.payload,
 	payloadType: row.payload_type,
 	target: row.target as T,
+	nextRun: row.next_run,
 	timezone: row.timezone,
 })

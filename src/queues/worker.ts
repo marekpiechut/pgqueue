@@ -165,8 +165,14 @@ export class Worker {
 
 	private async getNextRetry(item: AnyQueueItem): Promise<Date | null> {
 		const { db, queries } = this
-		const config = await db.execute(queries.fetchConfig(item.queue))
-		const retry = config?.retryPolicy || DEFAULT_QUEUE_CONFIG.retryPolicy
-		return nextRun(retry, item.tries + 1)
+		let retryPolicy = item.retryPolicy
+		if (!retryPolicy) {
+			const config = await db.execute(queries.fetchConfig(item.queue))
+			retryPolicy = config?.retryPolicy
+		}
+		return nextRun(
+			retryPolicy || DEFAULT_QUEUE_CONFIG.retryPolicy,
+			item.tries + 1
+		)
 	}
 }
