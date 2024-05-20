@@ -49,6 +49,13 @@ export interface QueueManager {
 		before?: UUID | null | undefined,
 		order?: 'ASC' | 'DESC'
 	): Promise<PagedResult<AnyHistory>>
+	fetchScheduleRuns(
+		scheduleId: UUID,
+		limit?: number,
+		after?: UUID | null | undefined,
+		before?: UUID | null | undefined,
+		order?: 'ASC' | 'DESC'
+	): Promise<PagedResult<AnyHistory>>
 	delete(id: UUID): Promise<AnyQueueItem>
 	withTenant(tenantId: TenantId): TenantQueueManager
 	withTx(tx: pg.ClientBase | DB): this
@@ -161,6 +168,26 @@ export class Queues implements QueueManager, TenantQueueManager {
 				after,
 				before,
 				sort
+			)
+		})
+	}
+
+	async fetchScheduleRuns(
+		scheduleId: string,
+		limit?: number | undefined,
+		after?: string | null | undefined,
+		before?: string | null | undefined,
+		order?: 'ASC' | 'DESC' | undefined
+	): Promise<PagedResult<AnyHistory>> {
+		const { db, queries } = this
+		return db.execute(client => {
+			return queries.fetchScheduleRunsPage(
+				client,
+				[scheduleId],
+				limit,
+				after,
+				before,
+				order
 			)
 		})
 	}

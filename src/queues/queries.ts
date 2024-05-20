@@ -139,7 +139,7 @@ export const withSchema = (schema: string) =>
 		fetchScheduleRunsPage: createPagedFetcher(
 			`${schema}.queue_history`,
 			'schedule_id=$1',
-			rowToItem
+			rowToHistory
 		),
 		fetchHistory: <T, R>(id: QueueHistory<T, R>['id']) => sql(
 			schema,
