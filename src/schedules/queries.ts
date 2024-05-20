@@ -31,12 +31,12 @@ export const withSchema = (schema: string) =>
 			firstRequired
 		)`
 			INSERT INTO {{schema}}.schedules
-			(id, tenant_id, name, type, queue, paused, retry_policy, schedule, payload_type, payload, target, timezone, next_run, created)
+			(id, tenant_id, key, type, queue, paused, retry_policy, schedule, payload_type, payload, target, timezone, next_run, created)
 			VALUES
 			(
 				${schedule.id}, 
 				${schedule.tenantId}, 
-				${schedule.name}, 
+				${schedule.key}, 
 				${schedule.type}, 
 				${schedule.queue}, 
 				${schedule.paused}, 
@@ -48,7 +48,19 @@ export const withSchema = (schema: string) =>
 				${schedule.timezone}, 
 				${schedule.nextRun}, 
 				now()
-			) RETURNING *`,
+			) ON CONFLICT (tenant_id, key) DO UPDATE SET
+				version = schedules.version + 1,
+				updated = now(),
+				payload = ${schedule.payload},
+				payload_type = ${schedule.payloadType},
+				queue = ${schedule.queue},
+				paused = ${schedule.paused},
+				retry_policy = ${schedule.retryPolicy},
+				schedule = ${cron.serialize(schedule.schedule)},
+				next_run = ${schedule.nextRun},
+				target = ${schedule.target},
+				timezone = ${schedule.timezone}
+			RETURNING *`,
 		update: <T>(schedule: Schedule<T>) => sql(
 			schema,
 			rowToSchedule<T>,
@@ -56,7 +68,7 @@ export const withSchema = (schema: string) =>
 		)`
 			UPDATE {{schema}}.schedules
 			SET
-				name = ${schedule.name},
+				key = ${schedule.key},
 				type = ${schedule.type},
 				queue = ${schedule.queue},
 				paused = ${schedule.paused},
@@ -76,7 +88,7 @@ export const withSchema = (schema: string) =>
 export const rowToSchedule = <T>(row: ScheduleRow): Schedule<T> => ({
 	id: row.id,
 	tenantId: row.tenant_id,
-	name: row.name,
+	key: row.key,
 	type: row.type,
 	queue: row.queue,
 	paused: row.paused || false,

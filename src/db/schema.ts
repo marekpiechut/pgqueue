@@ -80,7 +80,7 @@ export type WorkItemRow = {
 export type ScheduleRow = {
 	id: UUID
 	tenant_id: UUID
-	name: string
+	key?: string
 	type: string
 	queue: string
 	paused?: boolean

@@ -56,6 +56,7 @@ const INTERVALS = {
 	mo: 'months',
 	y: 'years',
 } as const
+const VALID_INTERVALS = Object.values(INTERVALS)
 
 export const deserialize = (input: string): ScheduleConfig => {
 	const [type, value] = input.split('=')
@@ -81,7 +82,7 @@ export const deserialize = (input: string): ScheduleConfig => {
 type BasicSchedule = {
 	type: 'basic'
 	every: number
-	interval: 'seconds' | 'minutes' | 'hours' | 'days' | 'months' | 'years'
+	interval: (typeof INTERVALS)[keyof typeof INTERVALS]
 	startAt?: Date
 }
 type CronSchedule = {
@@ -165,9 +166,32 @@ const guessGranularity = (expression: string): CronGranularity => {
 	return cronFieldGranularity[starIdx] || 'days'
 }
 
+const PATTERN_CRON_MACRO = /^@(yearly|monthly|weekly|daily|hourly)$/
+const PATTERN_CRON_SYNTAX = /(((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*) ?){5}/
+export const validator = (input: string): boolean => {
+	try {
+		const deserialized = deserialize(input)
+		if (deserialized.type === 'cron') {
+			if (deserialized.cron.startsWith('@')) {
+				return PATTERN_CRON_MACRO.test(deserialized.cron)
+			} else if (PATTERN_CRON_SYNTAX.test(deserialized.cron)) {
+				cron.parseExpression(deserialized.cron)
+				return true
+			}
+		} else if (deserialized.type === 'basic') {
+			return (
+				deserialized.every > 0 &&
+				VALID_INTERVALS.includes(deserialized.interval)
+			)
+		}
+	} catch (error) {}
+	return false
+}
+
 export default {
 	nextRun,
 	serialize,
 	deserialize,
 	isFuture,
+	validator,
 }

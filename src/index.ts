@@ -7,7 +7,13 @@ import * as queues from './queues'
 import * as schedules from './schedules'
 import * as stats from './stats'
 
-export { MimeType, MimeTypes } from './common/models'
+export {
+	MimeType,
+	MimeTypes,
+	MAX_ERROR_LEN,
+	MAX_KEY_LEN,
+	MAX_NAME_LEN,
+} from './common/models'
 
 export type Config = {
 	schema: string

@@ -1,7 +1,13 @@
 import { truncate } from 'lodash'
 import { uuidv7 } from 'uuidv7'
 import { minutes, seconds } from '~/common/duration'
-import { MAX_ERROR_LEN, MimeType, TenantId, UUID } from '~/common/models'
+import {
+	MAX_ERROR_LEN,
+	MAX_KEY_LEN,
+	MimeType,
+	TenantId,
+	UUID,
+} from '~/common/models'
 import { RetryPolicy } from '~/common/retry'
 
 export const DEFAULT_QUEUE_CONFIG = {
@@ -71,15 +77,20 @@ export type NewQueueItem<T> = {
 export const newItem = <T>(
 	tenant: TenantId,
 	config: NewQueueItem<T>
-): QueueItem<T> => ({
-	...config,
-	id: uuidv7(),
-	tenantId: tenant,
-	created: new Date(),
-	state: 'PENDING',
-	tries: 0,
-	version: 0,
-})
+): QueueItem<T> => {
+	if (config.key && config.key.length > MAX_KEY_LEN) {
+		throw new Error(`Key too long, max length is ${MAX_KEY_LEN}`)
+	}
+	return {
+		...config,
+		id: uuidv7(),
+		tenantId: tenant,
+		created: new Date(),
+		state: 'PENDING',
+		tries: 0,
+		version: 0,
+	}
+}
 
 export const itemRunFailed = <T, R>(
 	item: QueueItem<T>,

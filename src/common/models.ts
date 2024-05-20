@@ -1,4 +1,6 @@
 export const MAX_ERROR_LEN = 4095
+export const MAX_KEY_LEN = 255
+export const MAX_NAME_LEN = 255
 
 export type TenantId = string
 export type UUID = string

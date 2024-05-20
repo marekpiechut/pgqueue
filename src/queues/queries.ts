@@ -104,7 +104,21 @@ export const withSchema = (schema: string) =>
 				${item.resultType},
 				${item.error},
 				${item.workerData}
-			) RETURNING *
+			) 
+			ON CONFLICT (tenant_id, key) DO UPDATE SET
+				version=queue.version+1,
+				updated = now(),
+				created = ${item.created},
+				payload = ${item.payload},
+				payload_type = ${item.payloadType},
+				key = ${item.key},
+				delay = ${item.delay},
+				target = ${item.target},
+				type = ${item.type},
+				tries = 0,
+				run_after = ${item.runAfter},
+				retry_policy = ${item.retryPolicy}	
+			RETURNING *
 		`,
 		updateItem: <T>(item: QueueItem<T>) => sql(
 			schema,

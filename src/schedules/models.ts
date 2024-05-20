@@ -1,13 +1,13 @@
 import { uuidv7 } from 'uuidv7'
 import cron, { ScheduleConfig } from './cron'
-import { MimeType, TenantId, UUID } from '~/common/models'
+import { MAX_KEY_LEN, MimeType, TenantId, UUID } from '~/common/models'
 import { RetryPolicy } from '~/common/retry'
 import { NewQueueItem } from '~/queues'
 
 export const DEFAULT_TIMEZONE = 'UTC'
 
 export type NewSchedule<T> = {
-	name: string
+	key?: string
 	queue: string
 	schedule: ScheduleConfig
 	paused?: boolean
@@ -31,22 +31,27 @@ export type Schedule<T> = NewSchedule<T> & {
 }
 export type AnySchedule = Schedule<unknown>
 export type ScheduleUpdate<T> = Partial<
-	Pick<Schedule<T>, 'name' | 'schedule' | 'paused'>
+	Pick<Schedule<T>, 'schedule' | 'paused'>
 >
 
 export const newSchedule = <T>(
 	tenant: TenantId,
 	input: NewSchedule<T>
-): Schedule<T> => ({
-	...input,
-	id: uuidv7(),
-	tenantId: tenant,
-	version: 0,
-	tries: 0,
-	created: new Date(),
-	nextRun: cron.nextRun(input.schedule, { tz: input.timezone }),
-	timezone: input.timezone || DEFAULT_TIMEZONE,
-})
+): Schedule<T> => {
+	if (input.key && input.key.length > MAX_KEY_LEN) {
+		throw new Error(`Key too long, max length is ${MAX_KEY_LEN}`)
+	}
+	return {
+		...input,
+		id: uuidv7(),
+		tenantId: tenant,
+		version: 0,
+		tries: 0,
+		created: new Date(),
+		nextRun: cron.nextRun(input.schedule, { tz: input.timezone }),
+		timezone: input.timezone || DEFAULT_TIMEZONE,
+	}
+}
 
 export const executeSchedule = <T>(schedule: Schedule<T>): NewQueueItem<T> => ({
 	queue: schedule.queue,
@@ -72,7 +77,6 @@ export const updateSchedule = <T>(
 ): Schedule<T> => {
 	const updated = {
 		...current,
-		name: firstDefined(update.name, current.name),
 		paused: firstDefined(update.paused, current.paused, false),
 		schedule: firstDefined(update.schedule, current.schedule),
 	}

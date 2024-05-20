@@ -1,5 +1,6 @@
 import { Evolution } from '@dayone-labs/evolutions'
-import { MAX_ERROR_LEN } from '~/common/models'
+import { MAX_ERROR_LEN, MAX_NAME_LEN } from '~/common/models'
+import { MAX_KEY_LEN } from '~/common/models'
 
 const apply = (schema: string): Evolution => ({
 	ups: [
@@ -39,11 +40,11 @@ const apply = (schema: string): Evolution => ({
 			created TIMESTAMP NOT NULL,
 			updated TIMESTAMP,
 			started TIMESTAMP,
-			key VARCHAR(255),
+			key VARCHAR(${MAX_KEY_LEN}),
 			schedule_id UUID,
 			type VARCHAR(40) NOT NULL,
 			tries INTEGER NOT NULL DEFAULT 0,
-			queue VARCHAR(255) NOT NULL,
+			queue VARCHAR(${MAX_NAME_LEN}) NOT NULL,
 			state VARCHAR(40) NOT NULL,
 			delay INTEGER,
 			run_after TIMESTAMP,
@@ -58,8 +59,9 @@ const apply = (schema: string): Evolution => ({
 			PRIMARY KEY(id),
 			UNIQUE(tenant_id, queue, key)
 		);`,
-		`CREATE INDEX QUEUE_TENANT_QUEUE_KEY ON ${schema}.QUEUE (tenant_id, queue, key);`,
+		`CREATE INDEX QUEUE_TENANT_QUEUE_KEY ON ${schema}.QUEUE (tenant_id, queue);`,
 		`CREATE INDEX QUEUE_RUN_AFTER_CREATED ON ${schema}.QUEUE (run_after, created);`,
+		`CREATE UNIQUE INDEX QUEUE_TENANT_ID_KEY ON ${schema}.QUEUE (tenant_id, key);`,
 
 		/**
 		 * --- QUEUE CONFIG ---
@@ -67,7 +69,7 @@ const apply = (schema: string): Evolution => ({
 
 		`CREATE TABLE ${schema}.QUEUE_CONFIG (
 			tenant_id VARCHAR(40) NOT NULL,
-			queue VARCHAR(255) NOT NULL,
+			queue VARCHAR(${MAX_NAME_LEN}) NOT NULL,
 			created TIMESTAMP NOT NULL DEFAULT now(),
 			updated TIMESTAMP,
 			version INTEGER NOT NULL DEFAULT 0,
@@ -88,8 +90,8 @@ const apply = (schema: string): Evolution => ({
 		`CREATE TABLE ${schema}.QUEUE_HISTORY (
 			tenant_id VARCHAR(40) NOT NULL,
 			id UUID NOT NULL,
-			key VARCHAR(255),
-			queue VARCHAR(255) NOT NULL,
+			key VARCHAR(${MAX_KEY_LEN}),
+			queue VARCHAR(${MAX_NAME_LEN}) NOT NULL,
 			schedule_id UUID,
 			type VARCHAR(40) NOT NULL,
 			created TIMESTAMP NOT NULL,
@@ -139,9 +141,9 @@ const apply = (schema: string): Evolution => ({
 		`CREATE TABLE ${schema}.SCHEDULES (
 			id UUID NOT NULL,
 			tenant_id VARCHAR(40) NOT NULL DEFAULT current_setting('pgqueue.current_tenant', false),
-			queue VARCHAR(255) NOT NULL,
+			queue VARCHAR(${MAX_NAME_LEN}) NOT NULL,
 			type VARCHAR(40) NOT NULL,
-			name VARCHAR(255),
+			key VARCHAR(${MAX_KEY_LEN}),
 			paused BOOLEAN DEFAULT FALSE,
 			retry_policy JSONB,
 			created TIMESTAMP NOT NULL DEFAULT now(),
@@ -157,8 +159,7 @@ const apply = (schema: string): Evolution => ({
 			timezone VARCHAR(32) NOT NULL,
 			PRIMARY KEY(id)
 		);`,
-		`CREATE UNIQUE INDEX SCHEDULE_TENANT_NAME ON ${schema}.SCHEDULES (tenant_id, name);`,
-		//TODO: do we need index on queue name?
+		`CREATE UNIQUE INDEX SCHEDULE_TENANT_KEY ON ${schema}.SCHEDULES (tenant_id, key);`,
 		`CREATE INDEX SCHEDULE_NEXT_RUN ON ${schema}.SCHEDULES (next_run, paused);`,
 		`ALTER TABLE ${schema}.SCHEDULES ENABLE ROW LEVEL SECURITY;`,
 		`CREATE POLICY TENANT_POLICY on ${schema}.SCHEDULES USING (
