@@ -26,6 +26,7 @@ export type Schedule<T> = NewSchedule<T> & {
 	created: Date
 	updated?: Date
 	nextRun?: Date
+	lastRun?: Date
 	timezone: string
 }
 export type AnySchedule = Schedule<unknown>
@@ -62,6 +63,7 @@ export const executedSuccessfully = <T>(
 ): Schedule<T> => ({
 	...schedule,
 	nextRun: cron.nextRun(schedule.schedule, { tz: schedule.timezone }),
+	lastRun: new Date(),
 })
 
 export const updateSchedule = <T>(

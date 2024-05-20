@@ -149,6 +149,7 @@ const apply = (schema: string): Evolution => ({
 			version INTEGER NOT NULL DEFAULT 0,
 			tries INTEGER NOT NULL DEFAULT 0,
 			next_run TIMESTAMP,
+			last_run TIMESTAMP,
 			payload BYTEA,
 			payload_type VARCHAR(255),
 			target JSONB,

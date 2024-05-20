@@ -90,6 +90,7 @@ export type ScheduleRow = {
 	created: Date
 	updated?: Date
 	next_run?: Date
+	last_run?: Date
 	schedule: string
 	payload_type?: string
 	payload?: Buffer

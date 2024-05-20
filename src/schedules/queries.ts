@@ -63,6 +63,7 @@ export const withSchema = (schema: string) =>
 				retry_policy = ${schedule.retryPolicy},
 				schedule = ${cron.serialize(schedule.schedule)},
 				next_run = ${schedule.nextRun},
+				last_run = ${schedule.lastRun},
 				payload_type = ${schedule.payloadType},
 				payload = ${schedule.payload},
 				target = ${schedule.target},
@@ -89,5 +90,6 @@ export const rowToSchedule = <T>(row: ScheduleRow): Schedule<T> => ({
 	payloadType: row.payload_type,
 	target: row.target as T,
 	nextRun: row.next_run,
+	lastRun: row.last_run,
 	timezone: row.timezone,
 })
