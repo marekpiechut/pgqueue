@@ -33,6 +33,7 @@ export type QueueItem<T, R = unknown> = {
 	tenantId: TenantId
 	key?: string
 	type: string
+	scheduleId?: UUID
 	version: number
 	tries: number
 	queue: string
@@ -107,6 +108,7 @@ export const itemCompleted = <T, R>(
 	tenantId: item.tenantId,
 	key: item.key,
 	type: item.type,
+	scheduleId: item.scheduleId,
 	created: new Date(),
 	started: item.started || new Date(),
 	scheduled: item.created,
@@ -130,6 +132,7 @@ export const itemFailed = <T, R>(
 	tenantId: item.tenantId,
 	key: item.key,
 	type: item.type,
+	scheduleId: item.scheduleId,
 	created: new Date(),
 	started: item.started || new Date(),
 	scheduled: item.created,
@@ -170,6 +173,7 @@ export type QueueHistory<T, R> = {
 	tenantId: UUID
 	key?: string
 	type: string
+	scheduleId?: UUID
 	created: Date
 	scheduled: Date
 	started: Date

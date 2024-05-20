@@ -16,6 +16,7 @@ export type QueueItemRow = {
 	started?: Date
 	key?: string
 	type: string
+	schedule_id?: UUID
 	tries: number
 	queue: string
 	state: string
@@ -48,6 +49,7 @@ export type QueueHistoryRow = {
 	type: string
 	key?: string
 	queue: string
+	schedule_id?: UUID
 	created: Date
 	scheduled: Date
 	started: Date

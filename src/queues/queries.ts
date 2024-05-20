@@ -85,12 +85,13 @@ export const withSchema = (schema: string) =>
 		`,
 		insert: <T>(item: QueueItem<T>) => sql(schema, rowToItem<T>, firstRequired)`
 			INSERT INTO {{schema}}.queue (
-				id, tenant_id, key, type, queue, created, state, delay, run_after, payload, payload_type, target, result, result_type, error, worker_data
+				id, tenant_id, key, type, schedule_id, queue, created, state, delay, run_after, payload, payload_type, target, result, result_type, error, worker_data
 			) values (
 				${item.id},
 				${item.tenantId},
 				${item.key},
 				${item.type},
+				${item.scheduleId},
 				${item.queue},
 				${item.created},
 				${item.state},
@@ -135,6 +136,11 @@ export const withSchema = (schema: string) =>
 			'queue=$1',
 			rowToItem
 		),
+		fetchScheduleRunsPage: createPagedFetcher(
+			`${schema}.queue_history`,
+			'schedule_id=$1',
+			rowToItem
+		),
 		fetchHistory: <T, R>(id: QueueHistory<T, R>['id']) => sql(
 			schema,
 			rowToHistory,
@@ -157,6 +163,7 @@ export const withSchema = (schema: string) =>
 			tenant_id,
 			key,
 			type,
+			schedule_id,
 			queue,
 			created,
 			scheduled,
@@ -176,6 +183,7 @@ export const withSchema = (schema: string) =>
 			${history.tenantId},
 			${history.key},
 			${history.type},
+			${history.scheduleId},
 			${history.queue},
 			${history.created},
 			${history.scheduled},
@@ -256,6 +264,7 @@ const rowToItem = <T>(row: QueueItemRow): QueueItem<T> => {
 		tenantId: row.tenant_id,
 		key: row.key,
 		type: row.type,
+		scheduleId: row.schedule_id,
 		version: row.version,
 		tries: row.tries,
 		queue: row.queue,
@@ -288,6 +297,7 @@ const rowToHistory = <T, R>(row: QueueHistoryRow): QueueHistory<T, R> => ({
 	tenantId: row.tenant_id,
 	key: row.key,
 	type: row.type,
+	scheduleId: row.schedule_id,
 	started: row.started,
 	queue: row.queue,
 	created: row.created,

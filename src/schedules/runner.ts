@@ -60,7 +60,9 @@ export class ScheduleRunner {
 			queries.fetchAndLockRunnable(this.config.batchSize)
 		)
 
-		log.debug('Fetched schedules to run', { count: schedules.length })
+		if (schedules.length) {
+			log.debug('Fetched %d schedules to run', schedules.length)
+		}
 
 		//Distribute by tenant, so no one tenant can block the others
 		const shuffled = shuffleBy(schedules, 'tenantId')

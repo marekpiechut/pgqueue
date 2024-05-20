@@ -28,6 +28,10 @@ export type Schedule<T> = NewSchedule<T> & {
 	nextRun?: Date
 	timezone: string
 }
+export type AnySchedule = Schedule<unknown>
+export type ScheduleUpdate<T> = Partial<
+	Pick<Schedule<T>, 'name' | 'schedule' | 'paused'>
+>
 
 export const newSchedule = <T>(
 	tenant: TenantId,
@@ -59,3 +63,24 @@ export const executedSuccessfully = <T>(
 	...schedule,
 	nextRun: cron.nextRun(schedule.schedule, { tz: schedule.timezone }),
 })
+
+export const updateSchedule = <T>(
+	current: Schedule<T>,
+	update: ScheduleUpdate<T>
+): Schedule<T> => {
+	const updated = {
+		...current,
+		name: firstDefined(update.name, current.name),
+		paused: firstDefined(update.paused, current.paused, false),
+		schedule: firstDefined(update.schedule, current.schedule),
+	}
+
+	if (!updated.paused && current.paused) {
+		updated.nextRun = cron.nextRun(updated.schedule, { tz: updated.timezone })
+	}
+
+	return updated
+}
+
+const firstDefined = <T>(...values: Array<T | undefined>): T =>
+	values.find(v => v !== undefined)!

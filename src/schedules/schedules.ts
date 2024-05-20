@@ -3,7 +3,14 @@ import logger from '~/common/logger'
 import { TenantId } from '~/common/models'
 import { DB, DBConnectionSpec } from '~/common/sql'
 import { DEFAULT_SCHEMA } from '~/db'
-import { NewSchedule, Schedule, newSchedule } from './models'
+import {
+	AnySchedule,
+	NewSchedule,
+	Schedule,
+	ScheduleUpdate,
+	newSchedule,
+	updateSchedule,
+} from './models'
 import { Queries, withSchema } from './queries'
 
 const log = logger('pgqueue:schedules')
@@ -15,7 +22,10 @@ export type TenantScheduleManager = {
 	fetchAll(): Promise<Schedule<unknown>[]>
 	fetch<T>(id: Schedule<T>['id']): Promise<Schedule<T> | undefined>
 	create<T>(schedule: NewSchedule<T>): Promise<Schedule<T>>
-	// save<T>(schedule: Schedule<T> | NewSchedule<T>): Promise<Schedule<T>>
+	update<T>(
+		id: Schedule<T>['id'],
+		update: ScheduleUpdate<T>
+	): Promise<Schedule<T>>
 }
 
 export type SchedulesConfig = {
@@ -65,15 +75,32 @@ export class Schedules implements ScheduleManager, TenantScheduleManager {
 		const { db, queries } = this
 		return db.execute(queries.fetchAll())
 	}
-	fetch<T>(id: string): Promise<Schedule<T> | undefined> {
+	fetch<T>(id: AnySchedule['id']): Promise<Schedule<T> | undefined> {
 		const { db, queries } = this
 		return db.execute(queries.fetch(id))
+	}
+	async update<T>(
+		id: AnySchedule['id'],
+		update: ScheduleUpdate<T>
+	): Promise<Schedule<T>> {
+		this.requireTenant()
+		const { db, queries } = this
+		const current = await this.fetch<T>(id)
+		if (!current) {
+			throw new Error('Schedule not found')
+		}
+
+		const updated = updateSchedule(current, update)
+
+		log.debug('Updating schedule', updated)
+		return db.execute(queries.update<T>(updated))
 	}
 	create<T>(input: NewSchedule<T>): Promise<Schedule<T>> {
 		this.requireTenant()
 		const { db, queries } = this
 		const schedule = newSchedule(this.tenantId!, input)
-		log.info('Creating schedule', schedule)
+
+		log.debug('Creating schedule', schedule)
 		return db.execute(queries.insert(schedule))
 	}
 	private requireTenant(message?: string): void {
