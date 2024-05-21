@@ -56,18 +56,26 @@ export const withSchema = (schema: string) =>
 				queue_count AS (
 					SELECT count(*) AS count FROM (SELECT DISTINCT tenant_id, queue FROM {{schema}}.queue) AS q
 				),
+				schedules AS (
+					SELECT count(*) AS count FROM {{schema}}.schedules WHERE paused IS NOT TRUE AND next_run > now()
+				),
 				errors_today AS (
 					SELECT count(*) AS count FROM {{schema}}.queue_history WHERE state='FAILED' AND created > (now() - interval '1 day')
 				),
 				last_error AS (
 					SELECT max(created) AS created FROM {{schema}}.queue_history WHERE state='FAILED' AND created > (now() - interval '1 day')
+				),
+				next_schedule AS (
+					SELECT next_run AS next_run FROM {{schema}}.schedules WHERE paused IS NOT TRUE AND next_run > now() ORDER BY next_run LIMIT 1
 				)
 				SELECT 
 					pending.count as pending,	
 					queue_count.count as queues,
+					schedules.count as schedules,
 					errors_today.count as errors_today,
-					last_error.created as last_error
-					FROM pending, queue_count, errors_today, last_error
+					last_error.created as last_error,
+					next_schedule.next_run as next_schedule
+					FROM pending, schedules, queue_count, errors_today, last_error, next_schedule
 			`,
 		//TODO: optimize this query
 		//TODO: add timezone handling
@@ -98,11 +106,15 @@ type QueueHistogram = {
 const todayMapper = (row: {
 	queues: number
 	pending: number
+	schedules: number
 	errors_today: number
-	last_error: Date
+	last_error?: Date | null
+	next_schedule?: Date | null
 }): BasicStats => ({
 	queues: row.queues,
 	pending: row.pending,
+	schedules: row.schedules,
 	failedToday: row.errors_today,
-	lastFailedAt: row.last_error,
+	lastFailedAt: row.last_error ?? undefined,
+	nextSchedule: row.next_schedule ?? undefined,
 })
