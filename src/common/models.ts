@@ -27,3 +27,9 @@ export type PagedResult<T> = {
 	page: PageInfo
 	items: T[]
 }
+
+const PATTERN_UUID =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+export const isUUID = (id: string): boolean => {
+	return PATTERN_UUID.test(id)
+}

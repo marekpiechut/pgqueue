@@ -1,6 +1,6 @@
 import pg from 'pg'
 import logger from '~/common/logger'
-import { PagedResult, TenantId, UUID } from '~/common/models'
+import { PagedResult, TenantId, UUID, isUUID } from '~/common/models'
 import { SortOrder } from '~/common/psql'
 import { nextRun } from '~/common/retry'
 import { DB, DBConnectionSpec } from '~/common/sql'
@@ -34,7 +34,9 @@ const DEFAULT_CONFIG = {
 export interface QueueManager {
 	fetchQueues(): Promise<QueueConfig[]>
 	fetchQueue(name: string): Promise<QueueConfig | undefined>
-	fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | undefined>
+	fetchItem(
+		idOrKey: UUID | string
+	): Promise<AnyQueueItem | AnyHistory | undefined>
 	fetchItems(
 		queue: string,
 		limit?: number,
@@ -56,7 +58,7 @@ export interface QueueManager {
 		before?: UUID | null | undefined,
 		order?: 'ASC' | 'DESC'
 	): Promise<PagedResult<AnyHistory>>
-	delete(id: UUID): Promise<AnyQueueItem>
+	delete(idOrKey: UUID | string): Promise<AnyQueueItem | undefined>
 	withTenant(tenantId: TenantId): TenantQueueManager
 	withTx(tx: pg.ClientBase | DB): this
 }
@@ -131,13 +133,23 @@ export class Queues implements QueueManager, TenantQueueManager {
 		return db.execute(queries.fetchQueue(name))
 	}
 
-	async fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | undefined> {
+	async fetchItem(
+		idOrKey: UUID | string
+	): Promise<AnyQueueItem | AnyHistory | undefined> {
 		const { db, queries } = this
-		const [current, history] = await Promise.all([
-			db.execute(queries.fetchItem(id)),
-			db.execute(queries.fetchHistory(id)),
-		])
-		return current || history
+		if (isUUID(idOrKey)) {
+			const [current, history] = await Promise.all([
+				db.execute(queries.fetchItem(idOrKey)),
+				db.execute(queries.fetchHistory(idOrKey)),
+			])
+			return current || history
+		} else {
+			const [current, history] = await Promise.all([
+				db.execute(queries.fetchItemByKey(idOrKey)),
+				db.execute(queries.fetchHistoryByKey(idOrKey)),
+			])
+			return current || history
+		}
 	}
 
 	async fetchItems(
@@ -203,13 +215,17 @@ export class Queues implements QueueManager, TenantQueueManager {
 
 	async delete(
 		idOrItem: AnyQueueItem['id'] | AnyQueueItem
-	): Promise<AnyQueueItem> {
+	): Promise<AnyQueueItem | undefined> {
 		const { db, queries } = this
 
 		if (typeof idOrItem !== 'string') {
 			idOrItem = idOrItem.id
 		}
-		return db.execute(queries.deleteItem(idOrItem))
+		if (isUUID(idOrItem)) {
+			return db.execute(queries.deleteItem(idOrItem))
+		} else {
+			return db.execute(queries.deleteItemByKey(idOrItem))
+		}
 	}
 
 	async completed<T, R>(

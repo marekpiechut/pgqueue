@@ -10,6 +10,7 @@ import {
 	createPagedFetcher,
 } from '../db'
 import {
+	AnyHistory,
 	AnyQueueItem,
 	NewWorkItem,
 	QueueConfig,
@@ -64,7 +65,7 @@ export const withSchema = (schema: string) =>
 		fetchAndLockDueItems: (limit: number = 100) => sql(schema, rowToItem)`
 			SELECT *
 			FROM {{schema}}.QUEUE
-			WHERE state='PENDING' or state='RETRY' AND (run_after IS NULL OR run_after <= now())
+			WHERE (state='PENDING' OR state='RETRY') AND (run_after IS NULL OR run_after <= now())
 			ORDER BY created, id ASC
 			LIMIT ${limit} FOR UPDATE SKIP LOCKED
 		`,
@@ -74,14 +75,20 @@ export const withSchema = (schema: string) =>
 			WHERE id = ANY(${items})
 		`,
 		fetchItem: (id: AnyQueueItem['id']) => sql(schema, rowToItem, first)`
-			SELECT * FROM {{schema}}.queue WHERE id = ${id}
+			SELECT * FROM {{schema}}.queue WHERE id = ${id} OR key = ${id} 
 		`,
-		deleteItem: (id: AnyQueueItem['id']) => sql(
+		fetchItemByKey: (key: AnyQueueItem['key']) => sql(schema, rowToItem, first)`
+			SELECT * FROM {{schema}}.queue WHERE key = ${key}
+		`,
+		deleteItem: (id: AnyQueueItem['id']) => sql(schema, rowToItem, first)`
+			DELETE FROM {{schema}}.queue WHERE id = ${id} OR key = ${id}  RETURNING *
+		`,
+		deleteItemByKey: (key: AnyQueueItem['key']) => sql(
 			schema,
 			rowToItem,
-			firstRequired
+			first
 		)`
-			DELETE FROM {{schema}}.queue WHERE id = ${id} RETURNING *
+			DELETE FROM {{schema}}.queue WHERE key = ${key} RETURNING *
 		`,
 		insert: <T>(item: QueueItem<T>) => sql(schema, rowToItem<T>, firstRequired)`
 			INSERT INTO {{schema}}.queue (
@@ -155,12 +162,19 @@ export const withSchema = (schema: string) =>
 			'schedule_id=$1',
 			rowToHistory
 		),
-		fetchHistory: <T, R>(id: QueueHistory<T, R>['id']) => sql(
+		fetchHistory: <T, R>(id: AnyHistory['id']) => sql(
 			schema,
-			rowToHistory,
+			rowToHistory<T, R>,
 			first
 		)`
-			SELECT * FROM {{schema}}.queue_history WHERE id = ${id}
+			SELECT * FROM {{schema}}.queue_history WHERE id = ${id} OR key = ${id} 
+		`,
+		fetchHistoryByKey: <T, R>(key: AnyHistory['key']) => sql(
+			schema,
+			rowToHistory<T, R>,
+			first
+		)`
+			SELECT * FROM {{schema}}.queue_history WHERE key = ${key}
 		`,
 		fetchHistoryPage: createPagedFetcher(
 			`${schema}.queue_history`,
