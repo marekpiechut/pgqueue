@@ -1,6 +1,6 @@
 import * as pg from 'pg'
 import logger from '~/common/logger'
-import { TenantId } from '~/common/models'
+import { TenantId, isUUID } from '~/common/models'
 import { DB, DBConnectionSpec } from '~/common/sql'
 import { DEFAULT_SCHEMA } from '~/db'
 import {
@@ -21,6 +21,7 @@ export type ScheduleManager = {
 export type TenantScheduleManager = {
 	fetchAll(): Promise<Schedule<unknown>[]>
 	fetch<T>(id: Schedule<T>['id']): Promise<Schedule<T> | undefined>
+	delete<T>(id: Schedule<T>['id']): Promise<Schedule<T> | undefined>
 	create<T>(schedule: NewSchedule<T>): Promise<Schedule<T>>
 	update<T>(
 		id: Schedule<T>['id'],
@@ -75,9 +76,29 @@ export class Schedules implements ScheduleManager, TenantScheduleManager {
 		const { db, queries } = this
 		return db.execute(queries.fetchAll())
 	}
-	fetch<T>(id: AnySchedule['id']): Promise<Schedule<T> | undefined> {
+	fetch<T>(
+		idOrKey: AnySchedule['id'] | AnySchedule['key']
+	): Promise<Schedule<T> | undefined> {
 		const { db, queries } = this
-		return db.execute(queries.fetch(id))
+		if (!idOrKey) {
+			return Promise.resolve(undefined)
+		} else if (isUUID(idOrKey)) {
+			return db.execute(queries.fetch(idOrKey))
+		} else {
+			return db.execute(queries.fetchByKey(idOrKey))
+		}
+	}
+	delete<T>(
+		idOrKey: AnySchedule['id'] | AnySchedule['key']
+	): Promise<Schedule<T> | undefined> {
+		const { db, queries } = this
+		if (!idOrKey) {
+			return Promise.resolve(undefined)
+		} else if (isUUID(idOrKey)) {
+			return db.execute(queries.delete(idOrKey))
+		} else {
+			return db.execute(queries.deleteByKey(idOrKey))
+		}
 	}
 	async update<T>(
 		id: AnySchedule['id'],

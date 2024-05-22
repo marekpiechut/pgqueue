@@ -2,7 +2,7 @@ import { RetryPolicy } from '~/common/retry'
 import { first, firstRequired, sql } from '~/common/sql'
 import { ScheduleRow } from '~/db'
 import cron from './cron'
-import { Schedule } from './models'
+import { AnySchedule, Schedule } from './models'
 
 export type Queries = ReturnType<typeof withSchema>
 export const withSchema = (schema: string) =>
@@ -10,12 +10,25 @@ export const withSchema = (schema: string) =>
 		fetchAll: () => sql(schema, rowToSchedule)`
 			SELECT * FROM {{schema}}.schedules
 		`,
-		fetch: <T>(id: Schedule<unknown>['id']) => sql(
+		fetch: <T>(id: AnySchedule['id']) => sql(schema, rowToSchedule<T>, first)`
+			SELECT * FROM {{schema}}.schedules WHERE id = ${id} OR key = ${id}
+		`,
+		fetchByKey: <T>(key: AnySchedule['key']) => sql(
 			schema,
 			rowToSchedule<T>,
 			first
 		)`
-			SELECT * FROM {{schema}}.schedules WHERE id = ${id}
+			SELECT * FROM {{schema}}.schedules WHERE key = ${key}
+		`,
+		delete: <T>(id: AnySchedule['id']) => sql(schema, rowToSchedule<T>, first)`
+			DELETE FROM {{schema}}.schedules WHERE id = ${id} OR key = ${id} RETURNING *
+		`,
+		deleteByKey: <T>(id: AnySchedule['key']) => sql(
+			schema,
+			rowToSchedule<T>,
+			first
+		)`
+			DELETE FROM {{schema}}.schedules WHERE key = ${id} RETURNING *
 		`,
 		//TODO: skip already scheduled!!!
 		fetchAndLockRunnable: (batchSize: number) => sql(schema, rowToSchedule)`
