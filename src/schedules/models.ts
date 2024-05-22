@@ -81,7 +81,7 @@ export const updateSchedule = <T>(
 		schedule: firstDefined(update.schedule, current.schedule),
 	}
 
-	if (!updated.paused && current.paused) {
+	if ((!updated.paused && current.paused) || update.schedule) {
 		updated.nextRun = cron.nextRun(updated.schedule, { tz: updated.timezone })
 	}
 
