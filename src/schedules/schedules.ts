@@ -21,7 +21,9 @@ export type ScheduleManager = {
 export type TenantScheduleManager = {
 	fetchAll(): Promise<Schedule<unknown>[]>
 	fetch<T>(id: Schedule<T>['id']): Promise<Schedule<T> | undefined>
-	delete<T>(id: Schedule<T>['id']): Promise<Schedule<T> | undefined>
+	delete<T>(
+		idOrKey: AnySchedule['id'] | AnySchedule['key']
+	): Promise<Schedule<T> | undefined>
 	create<T>(schedule: NewSchedule<T>): Promise<Schedule<T>>
 	update<T>(
 		id: Schedule<T>['id'],
