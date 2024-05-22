@@ -66,7 +66,7 @@ export const withSchema = (schema: string) =>
 					SELECT max(created) AS created FROM {{schema}}.queue_history WHERE state='FAILED' AND created > (now() - interval '1 day')
 				),
 				next_schedule AS (
-					SELECT next_run AS next_run FROM {{schema}}.schedules WHERE paused IS NOT TRUE AND next_run > now() ORDER BY next_run LIMIT 1
+					SELECT min(next_run) AS next_run FROM {{schema}}.schedules WHERE paused IS NOT TRUE AND next_run > now() 
 				)
 				SELECT 
 					pending.count as pending,	
