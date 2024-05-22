@@ -26,6 +26,9 @@ export type QueueConfig = {
 	paused: boolean
 	retryPolicy?: RetryPolicy
 }
+export type QueueConfigUpdate = Partial<
+	Pick<QueueConfig, 'displayName' | 'paused'>
+>
 
 export type QueueItemState =
 	| 'PENDING'

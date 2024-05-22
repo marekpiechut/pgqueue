@@ -73,7 +73,7 @@ const apply = (schema: string): Evolution => ({
 			created TIMESTAMP NOT NULL DEFAULT now(),
 			updated TIMESTAMP,
 			version INTEGER NOT NULL DEFAULT 0,
-			display_name VARCHAR(255),
+			display_name VARCHAR(${MAX_NAME_LEN}),
 			paused BOOLEAN NOT NULL DEFAULT FALSE,
 			retry_policy JSONB,
 			PRIMARY KEY(tenant_id, queue)

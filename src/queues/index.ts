@@ -4,6 +4,7 @@ export {
 	AnyQueueItem,
 	NewQueueItem,
 	QueueConfig,
+	QueueConfigUpdate,
 	QueueHistory,
 	QueueItem,
 	QueueItemState,

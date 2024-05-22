@@ -11,6 +11,7 @@ import {
 	DEFAULT_QUEUE_CONFIG,
 	NewQueueItem,
 	QueueConfig,
+	QueueConfigUpdate,
 	QueueItem,
 	WorkResult,
 	itemCompleted,
@@ -64,10 +65,7 @@ export interface QueueManager {
 }
 
 export interface TenantQueueManager extends QueueManager {
-	configure(
-		queue: string,
-		options: Partial<Pick<QueueConfig, 'displayName' | 'paused'>>
-	): Promise<QueueConfig>
+	configure(queue: string, options: QueueConfigUpdate): Promise<QueueConfig>
 	push<T>(item: NewQueueItem<T>): Promise<QueueItem<T>>
 	completed<T, R>(item: QueueItem<T>, result: WorkResult<R>): Promise<void>
 	failed<T, R>(
