@@ -151,6 +151,7 @@ export const withSchema = (schema: string) =>
 				retry_policy = ${item.retryPolicy}
 			WHERE
 				id = ${item.id} AND version = ${item.version}
+			RETURNING *
 		`,
 		fetchItemsPage: createPagedFetcher(
 			`${schema}.queue`,

@@ -10,6 +10,7 @@ import {
 	AnyQueueItem,
 	AnyWorkResult,
 	DEFAULT_QUEUE_CONFIG,
+	HandlerError,
 	QueueItem,
 	WorkResult,
 	itemCompleted,
@@ -31,14 +32,6 @@ const DEFAULT_CONFIG = {
 	pollInterval: 1000,
 	batchSize: 10,
 	lockTimeout: minutes(2),
-}
-
-export class HandlerError extends Error {
-	result?: AnyWorkResult
-	constructor(message: string, result?: AnyWorkResult) {
-		super(message)
-		this.result = result
-	}
 }
 
 const startedWorkerNodes: string[] = []
