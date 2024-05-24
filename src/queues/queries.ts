@@ -124,6 +124,7 @@ export const withSchema = (schema: string) =>
 				delay = ${item.delay},
 				target = ${item.target},
 				type = ${item.type},
+				state = ${item.state},
 				tries = 0,
 				run_after = ${item.runAfter},
 				retry_policy = ${item.retryPolicy}	
