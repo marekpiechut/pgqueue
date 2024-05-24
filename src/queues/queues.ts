@@ -36,8 +36,10 @@ export interface QueueManager {
 	fetchQueues(): Promise<QueueConfig[]>
 	fetchQueue(name: string): Promise<QueueConfig | undefined>
 	fetchItem(
-		idOrKey: UUID | string
+		queue: string,
+		key: string
 	): Promise<AnyQueueItem | AnyHistory | undefined>
+	fetchItem(id: UUID): Promise<AnyQueueItem | AnyHistory | undefined>
 	fetchItems(
 		queue: string,
 		limit?: number,
@@ -59,7 +61,8 @@ export interface QueueManager {
 		before?: UUID | null | undefined,
 		order?: 'ASC' | 'DESC'
 	): Promise<PagedResult<AnyHistory>>
-	delete(idOrKey: UUID | string): Promise<AnyQueueItem | undefined>
+	delete(id: UUID): Promise<AnyQueueItem | undefined>
+	delete(queue: string, key: string): Promise<AnyQueueItem | undefined>
 	withTenant(tenantId: TenantId): TenantQueueManager
 	withTx(tx: pg.ClientBase | DB): this
 }
@@ -132,19 +135,23 @@ export class Queues implements QueueManager, TenantQueueManager {
 	}
 
 	async fetchItem(
-		idOrKey: UUID | string
+		idOrQueue: UUID | string,
+		key?: string
 	): Promise<AnyQueueItem | AnyHistory | undefined> {
 		const { db, queries } = this
-		if (isUUID(idOrKey)) {
+		if (key) {
 			const [current, history] = await Promise.all([
-				db.execute(queries.fetchItem(idOrKey)),
-				db.execute(queries.fetchHistory(idOrKey)),
+				db.execute(queries.fetchItemByKey(idOrQueue, key)),
+				db.execute(queries.fetchHistoryByKey(idOrQueue, key)),
 			])
 			return current || history
 		} else {
+			if (!isUUID(idOrQueue)) {
+				throw new Error('Invalid id, has to be an UUID')
+			}
 			const [current, history] = await Promise.all([
-				db.execute(queries.fetchItemByKey(idOrKey)),
-				db.execute(queries.fetchHistoryByKey(idOrKey)),
+				db.execute(queries.fetchItem(idOrQueue)),
+				db.execute(queries.fetchHistory(idOrQueue)),
 			])
 			return current || history
 		}
@@ -212,17 +219,14 @@ export class Queues implements QueueManager, TenantQueueManager {
 	}
 
 	async delete(
-		idOrItem: AnyQueueItem['id'] | AnyQueueItem
+		idOrQueue: UUID | string,
+		key?: string
 	): Promise<AnyQueueItem | undefined> {
 		const { db, queries } = this
-
-		if (typeof idOrItem !== 'string') {
-			idOrItem = idOrItem.id
-		}
-		if (isUUID(idOrItem)) {
-			return db.execute(queries.deleteItem(idOrItem))
+		if (key) {
+			return db.execute(queries.deleteItemByKey(idOrQueue, key))
 		} else {
-			return db.execute(queries.deleteItemByKey(idOrItem))
+			return db.execute(queries.deleteItem(idOrQueue))
 		}
 	}
 

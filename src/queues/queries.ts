@@ -75,20 +75,22 @@ export const withSchema = (schema: string) =>
 			WHERE id = ANY(${items})
 		`,
 		fetchItem: (id: AnyQueueItem['id']) => sql(schema, rowToItem, first)`
-			SELECT * FROM {{schema}}.queue WHERE id = ${id} OR key = ${id} 
+			SELECT * FROM {{schema}}.queue WHERE id = ${id} 
 		`,
-		fetchItemByKey: (key: AnyQueueItem['key']) => sql(schema, rowToItem, first)`
-			SELECT * FROM {{schema}}.queue WHERE key = ${key}
+		fetchItemByKey: (
+			queue: AnyQueueItem['queue'],
+			key: AnyQueueItem['key']
+		) => sql(schema, rowToItem, first)`
+			SELECT * FROM {{schema}}.queue WHERE queue = ${queue} AND key = ${key}
 		`,
 		deleteItem: (id: AnyQueueItem['id']) => sql(schema, rowToItem, first)`
-			DELETE FROM {{schema}}.queue WHERE id = ${id} OR key = ${id}  RETURNING *
+			DELETE FROM {{schema}}.queue WHERE id = ${id} RETURNING *
 		`,
-		deleteItemByKey: (key: AnyQueueItem['key']) => sql(
-			schema,
-			rowToItem,
-			first
-		)`
-			DELETE FROM {{schema}}.queue WHERE key = ${key} RETURNING *
+		deleteItemByKey: (
+			queue: AnyQueueItem['queue'],
+			key: AnyQueueItem['key']
+		) => sql(schema, rowToItem, first)`
+			DELETE FROM {{schema}}.queue WHERE queue = ${queue} AND key = ${key} RETURNING *
 		`,
 		insert: <T>(item: QueueItem<T>) => sql(schema, rowToItem<T>, firstRequired)`
 			INSERT INTO {{schema}}.queue (
@@ -112,7 +114,7 @@ export const withSchema = (schema: string) =>
 				${item.error},
 				${item.workerData}
 			) 
-			ON CONFLICT (tenant_id, key) DO UPDATE SET
+			ON CONFLICT (tenant_id, queue, key) DO UPDATE SET
 				version=queue.version+1,
 				updated = now(),
 				created = ${item.created},
@@ -168,14 +170,13 @@ export const withSchema = (schema: string) =>
 			rowToHistory<T, R>,
 			first
 		)`
-			SELECT * FROM {{schema}}.queue_history WHERE id = ${id} OR key = ${id} 
+			SELECT * FROM {{schema}}.queue_history WHERE id = ${id} 
 		`,
-		fetchHistoryByKey: <T, R>(key: AnyHistory['key']) => sql(
-			schema,
-			rowToHistory<T, R>,
-			first
-		)`
-			SELECT * FROM {{schema}}.queue_history WHERE key = ${key}
+		fetchHistoryByKey: <T, R>(
+			queue: AnyHistory['key'],
+			key: AnyHistory['key']
+		) => sql(schema, rowToHistory<T, R>, first)`
+			SELECT * FROM {{schema}}.queue_history WHERE queue = ${queue} AND key = ${key}
 		`,
 		fetchHistoryPage: createPagedFetcher(
 			`${schema}.queue_history`,

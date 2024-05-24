@@ -59,9 +59,7 @@ const apply = (schema: string): Evolution => ({
 			PRIMARY KEY(id),
 			UNIQUE(tenant_id, queue, key)
 		);`,
-		`CREATE INDEX QUEUE_TENANT_QUEUE_KEY ON ${schema}.QUEUE (tenant_id, queue);`,
 		`CREATE INDEX QUEUE_RUN_AFTER_CREATED ON ${schema}.QUEUE (run_after, created);`,
-		`CREATE UNIQUE INDEX QUEUE_TENANT_ID_KEY ON ${schema}.QUEUE (tenant_id, key);`,
 
 		/**
 		 * --- QUEUE CONFIG ---
