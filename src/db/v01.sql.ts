@@ -134,6 +134,22 @@ const apply = (schema: string): Evolution => ({
 		`CREATE INDEX WORK_QUEUE_CREATED_ORDER ON ${schema}.WORK_QUEUE (created, batch_order);`,
 
 		/**
+		 * --- WORKER METADATA ---
+		 */
+		`CREATE TABLE ${schema}.WORKER_METADATA (
+			tenant_id VARCHAR(40) NOT NULL DEFAULT current_setting('pgqueue.current_tenant', false),
+			key VARCHAR(255) NOT NULL,
+			value JSONB,
+			version INTEGER NOT NULL DEFAULT 0,
+			created TIMESTAMP NOT NULL DEFAULT now(),
+			updated TIMESTAMP,
+			PRIMARY KEY(tenant_id, key)
+		);`,
+		`CREATE POLICY TENANT_POLICY on ${schema}.WORKER_METADATA USING (
+			tenant_id = current_setting('pgqueue.current_tenant', true)
+		);`,
+
+		/**
 		 * --- SCHEDULE ---
 		 */
 		`CREATE TABLE ${schema}.SCHEDULES (

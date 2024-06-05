@@ -21,7 +21,7 @@ export {
 } from './queues'
 
 export { Scheduler } from './scheduler'
-export { Worker, WorkerConfig, WorkerHandler } from './worker'
+export { Worker, WorkerConfig, WorkerHandler, WorkerMetadata } from './worker'
 
 import { Queues } from './queues'
 export default Queues

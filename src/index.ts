@@ -30,6 +30,7 @@ export type Quickstart = {
 		handler: queues.WorkerHandler,
 		config: Omit<queues.WorkerConfig, 'schema'>
 	) => queues.Worker
+	workerMetadata: queues.WorkerMetadata
 }
 
 export default {
@@ -71,11 +72,13 @@ export default {
 		const queueStats = stats.Stats.create(db, config)
 		const queueManager = queues.Queues.create(db, config)
 		const scheduleManager = schedules.Schedules.create(db, config)
+		const workerMetadata = queues.WorkerMetadata.create(db, config)
 		return {
-			queues: queueManager,
 			// broadcaster: broadcaster,
+			queues: queueManager,
 			stats: queueStats,
 			schedules: scheduleManager,
+			workerMetadata: workerMetadata,
 			worker: (handler, workerConfig) =>
 				queues.Worker.create(db, { ...config, ...workerConfig }, handler),
 			scheduler: (pollInterval, batchSize) =>

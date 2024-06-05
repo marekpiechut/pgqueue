@@ -77,6 +77,15 @@ export type WorkItemRow = {
 	lock_timeout?: Date
 }
 
+export type WorkerMetadataRow = {
+	tenant_id: UUID
+	key: string
+	created: Date
+	updated?: Date
+	version: number
+	value?: Json
+}
+
 export type ScheduleRow = {
 	id: UUID
 	tenant_id: UUID

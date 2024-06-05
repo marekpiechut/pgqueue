@@ -33,3 +33,5 @@ const PATTERN_UUID =
 export const isUUID = (id: string): boolean => {
 	return PATTERN_UUID.test(id)
 }
+
+export type AnyObject = Record<string, unknown>

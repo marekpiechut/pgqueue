@@ -1,5 +1,6 @@
 import { first } from 'lodash'
 import { Duration, toSeconds } from '~/common/duration'
+import { AnyObject } from '~/common/models'
 import { RetryPolicy } from '~/common/retry'
 import { firstRequired, noopMapper, returnNothing, sql } from '~/common/sql'
 import {
@@ -7,6 +8,7 @@ import {
 	QueueHistoryRow,
 	QueueItemRow,
 	WorkItemRow,
+	WorkerMetadataRow,
 	createPagedFetcher,
 } from '../db'
 import {
@@ -287,6 +289,31 @@ export const withSchema = (schema: string) =>
 					started = NULL
 			WHERE lock_key = ${nodeId}
 		`,
+		setMetadata: <T extends AnyObject>(key: string, value: T) => sql(
+			schema,
+			rowToWorkerMetadata<T>,
+			firstRequired
+		)`
+			INSERT INTO {{schema}}.worker_metadata (key, value)
+			VALUES (${key}, ${value})
+			ON CONFLICT (tenant_id, key) DO UPDATE
+			SET value=${value}, updated=now(), version=worker_metadata.version+1
+			RETURNING *
+		`,
+		getMetadata: <T extends AnyObject>(key: string) => sql(
+			schema,
+			rowToWorkerMetadata<T>,
+			first
+		)`
+			SELECT * FROM {{schema}}.worker_metadata WHERE key = ${key}
+		`,
+		deleteMetadata: <T extends AnyObject>(key: string) => sql(
+			schema,
+			rowToWorkerMetadata<T>,
+			first
+		)`
+			DELETE FROM {{schema}}.worker_metadata WHERE key = ${key} RETURNING *
+		`,
 	}) as const
 
 const rowToItem = <T>(row: QueueItemRow): QueueItem<T> => {
@@ -356,3 +383,5 @@ const rowToWorkItem = (row: WorkItemRow): WorkItem => ({
 	lockKey: row.lock_key,
 	lockTimeout: row.lock_timeout,
 })
+
+const rowToWorkerMetadata = <T>(row: WorkerMetadataRow): T => row.value as T

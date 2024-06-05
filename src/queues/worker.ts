@@ -1,8 +1,10 @@
 import { pull } from 'lodash'
 import crypto from 'node:crypto'
+import pg from 'pg'
 import { minutes } from '~/common/duration'
 import logger from '~/common/logger'
 import { RerunImmediately, pollingLoop } from '~/common/polling'
+import { TenantId } from '~/common/psql'
 import { nextRun } from '~/common/retry'
 import { DB, DBConnectionSpec } from '~/common/sql'
 import { DEFAULT_SCHEMA } from '~/db'
@@ -18,6 +20,7 @@ import {
 	itemRunFailed,
 } from './models'
 import { Queries, withSchema } from './queries'
+import { AnyObject } from '~/common/models'
 
 const log = logger('pgqueue:worker')
 
@@ -167,5 +170,71 @@ export class Worker {
 			retryPolicy || DEFAULT_QUEUE_CONFIG.retryPolicy,
 			item.tries + 1
 		)
+	}
+}
+
+export type WorkerMetadataStore = {
+	withTenant: (tenantId: TenantId) => TenantWorkerMetadataStore
+}
+export type TenantWorkerMetadataStore = {
+	set: <T extends AnyObject>(key: string, value: T) => Promise<T>
+	get: <T extends AnyObject>(key: string) => Promise<T | undefined>
+	remove: <T extends AnyObject>(key: string) => Promise<T | undefined>
+}
+export class WorkerMetadata
+	implements WorkerMetadataStore, TenantWorkerMetadataStore
+{
+	private constructor(
+		private db: DB,
+		private queries: Queries,
+		private tenantId: TenantId | undefined
+	) {}
+
+	static create(
+		db: DBConnectionSpec | string,
+		config?: { schema?: string }
+	): WorkerMetadata {
+		const connection = DB.create(db)
+		const queries = withSchema(config?.schema || DEFAULT_SCHEMA)
+		return new WorkerMetadata(connection, queries, undefined)
+	}
+
+	withTenant(tenantId: TenantId): TenantWorkerMetadataStore {
+		return new WorkerMetadata(
+			this.db.withTenant(tenantId),
+			this.queries,
+			tenantId
+		)
+	}
+
+	public withTx(tx: pg.ClientBase | DB): this {
+		if (!(tx instanceof DB)) {
+			tx = this.db.withTx(tx)
+		}
+		return new WorkerMetadata(tx, this.queries, this.tenantId) as this
+	}
+
+	async set<T extends AnyObject>(key: string, value: T): Promise<T> {
+		this.requireTenant()
+		const { db, queries } = this
+		return await db.execute(queries.setMetadata(key, value))
+	}
+
+	async get<T extends AnyObject>(key: string): Promise<T | undefined> {
+		this.requireTenant()
+		const { db, queries } = this
+		return db.execute(queries.getMetadata(key))
+	}
+
+	async remove<T extends AnyObject>(key: string): Promise<T | undefined> {
+		this.requireTenant()
+		const { db, queries } = this
+		return db.execute(queries.deleteMetadata(key))
+	}
+
+	private requireTenant(message?: string): void {
+		if (!this.tenantId) {
+			throw new Error(message || 'TenantId is required')
+		}
 	}
 }
