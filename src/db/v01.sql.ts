@@ -1,4 +1,5 @@
 import { Evolution } from '@dayone-labs/evolutions'
+import { addMonths, format, startOfMonth } from 'date-fns'
 import { MAX_ERROR_LEN, MAX_NAME_LEN } from '~/common/models'
 import { MAX_KEY_LEN } from '~/common/models'
 
@@ -28,11 +29,9 @@ const apply = (schema: string): Evolution => ({
 		`GRANT QUEUE_USER TO lq`,
 		`GRANT QUEUE_WORKER TO lqworker`,
 		//END
-
 		/**
 		 * --- JOB QUEUE ---
 		 */
-
 		`CREATE TABLE ${schema}.QUEUE (
 			tenant_id VARCHAR(40) NOT NULL,
 			id UUID NOT NULL,
@@ -64,7 +63,6 @@ const apply = (schema: string): Evolution => ({
 		/**
 		 * --- QUEUE CONFIG ---
 		 */
-
 		`CREATE TABLE ${schema}.QUEUE_CONFIG (
 			tenant_id VARCHAR(40) NOT NULL,
 			queue VARCHAR(${MAX_NAME_LEN}) NOT NULL,
@@ -104,20 +102,22 @@ const apply = (schema: string): Evolution => ({
 			result_type VARCHAR(255),
 			error VARCHAR(${MAX_ERROR_LEN}),
 			target JSONB,
-			worker_data JSONB,
-			PRIMARY KEY(id)
-		);`,
+			worker_data JSONB
+		) PARTITION BY RANGE (created);`,
+		//Cannot create ID on partitioned table, need an index for id
+		`CREATE INDEX QUEUE_HISTORY_ID ON ${schema}.QUEUE_HISTORY (id);`,
 		`CREATE INDEX QUEUE_HISTORY_TENANT_STATE_CREATED ON ${schema}.QUEUE_HISTORY (tenant_id, state, created);`,
 		`ALTER TABLE ${schema}.QUEUE_HISTORY ENABLE ROW LEVEL SECURITY;`,
 		`CREATE POLICY TENANT_POLICY on ${schema}.QUEUE_HISTORY USING (
 			tenant_id = current_setting('pgqueue.current_tenant', true)
 		);`,
 		`CREATE POLICY WORKER_POLICY on ${schema}.QUEUE_HISTORY TO QUEUE_WORKER USING (TRUE);`,
+		//Create partitions for next few months
+		...createPartitions(schema, 3),
 
 		/**
 		 * --- WORK QUEUE ---
 		 */
-
 		`CREATE TABLE ${schema}.WORK_QUEUE (
 			id UUID NOT NULL,
 			tenant_id VARCHAR(40) NOT NULL,
@@ -190,5 +190,24 @@ const apply = (schema: string): Evolution => ({
 		`DROP TABLE IF EXISTS ${schema}.WORK;`,
 	],
 })
+
+const createPartitions = (
+	schema: string,
+	months: number,
+	startAt: number = 0
+): string[] => {
+	const currentMonth = startOfMonth(new Date())
+	const sqls = []
+	for (let i = 0; i < months; i++) {
+		const start = addMonths(currentMonth, i + startAt)
+		const end = addMonths(start, 1)
+		sqls.push(`
+		CREATE TABLE ${schema}.QUEUE_HISTORY_${format(start, 'yyyy_MM')}
+		PARTITION OF ${schema}.QUEUE_HISTORY
+		FOR VALUES FROM ('${format(start, 'yyyy-MM-dd')}') TO ('${format(end, 'yyyy-MM-dd')}')
+	;`)
+	}
+	return sqls
+}
 
 export default apply

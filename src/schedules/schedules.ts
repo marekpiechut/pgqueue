@@ -50,7 +50,7 @@ export class Schedules implements ScheduleManager, TenantScheduleManager {
 
 	public static create(
 		connectionSpec: DBConnectionSpec,
-		config: SchedulesConfig
+		config?: SchedulesConfig
 	): ScheduleManager {
 		const connection = DB.create(connectionSpec)
 		const mergedConfig = { ...DEFAULT_CONFIG, ...config }

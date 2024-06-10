@@ -193,7 +193,7 @@ export class WorkerMetadata
 	static create(
 		db: DBConnectionSpec | string,
 		config?: { schema?: string }
-	): WorkerMetadata {
+	): WorkerMetadataStore {
 		const connection = DB.create(db)
 		const queries = withSchema(config?.schema || DEFAULT_SCHEMA)
 		return new WorkerMetadata(connection, queries, undefined)

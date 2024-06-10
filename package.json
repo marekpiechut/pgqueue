@@ -8,7 +8,8 @@
 		".": "./lib/index.js",
 		"./schedules": "./lib/schedules/index.js",
 		"./queues": "./lib/queues/index.js",
-		"./stats": "./lib/stats/index.js"
+		"./stats": "./lib/stats/index.js",
+		"./maintenance": "./lib/maintenance/index.js"
 	},
 	"files": [
 		"lib"

@@ -32,7 +32,7 @@ export class Stats {
 		private config: Config & typeof DEFAULT_CONFIG
 	) {}
 
-	static create(connectionSpec: DBConnectionSpec, config: Config): Stats {
+	static create(connectionSpec: DBConnectionSpec, config?: Config): Stats {
 		const connection = DB.create(connectionSpec)
 		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
 		const queries = withSchema(mergedConfig.schema)

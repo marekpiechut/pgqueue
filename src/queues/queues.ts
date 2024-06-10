@@ -87,7 +87,10 @@ export class Queues implements QueueManager, TenantQueueManager {
 		private queries: queries.Queries
 	) {}
 
-	public static create(dbSpec: DBConnectionSpec, config: QueuesConfig): Queues {
+	public static create(
+		dbSpec: DBConnectionSpec,
+		config?: QueuesConfig
+	): Queues {
 		const db = DB.create(dbSpec)
 		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
 		const sqls = queries.withSchema(mergedConfig.schema)

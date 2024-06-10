@@ -30,7 +30,7 @@ export type Quickstart = {
 		handler: queues.WorkerHandler,
 		config: Omit<queues.WorkerConfig, 'schema'>
 	) => queues.Worker
-	workerMetadata: queues.WorkerMetadata
+	workerMetadata: queues.WorkerMetadataStore
 }
 
 export default {
