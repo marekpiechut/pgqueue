@@ -145,6 +145,7 @@ const apply = (schema: string): Evolution => ({
 			updated TIMESTAMP,
 			PRIMARY KEY(tenant_id, key)
 		);`,
+		`ALTER TABLE ${schema}.WORKER_METADATA ENABLE ROW LEVEL SECURITY;`,
 		`CREATE POLICY TENANT_POLICY on ${schema}.WORKER_METADATA USING (
 			tenant_id = current_setting('pgqueue.current_tenant', true)
 		);`,
