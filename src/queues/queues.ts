@@ -1,4 +1,5 @@
 import pg from 'pg'
+import { mergeConfig } from '~/common/config'
 import logger from '~/common/logger'
 import { PagedResult, TenantId, UUID, isUUID } from '~/common/models'
 import { SortOrder } from '~/common/psql'
@@ -92,7 +93,7 @@ export class Queues implements QueueManager, TenantQueueManager {
 		config?: QueuesConfig
 	): Queues {
 		const db = DB.create(dbSpec)
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const sqls = queries.withSchema(mergedConfig.schema)
 		return new Queues(db, mergedConfig, sqls)
 	}

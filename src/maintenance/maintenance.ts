@@ -5,6 +5,7 @@ import { RerunImmediately, pollingLoop } from '~/common/polling'
 import { DB, DBConnectionSpec } from '~/common/sql'
 import { DEFAULT_SCHEMA } from '~/db'
 import { Queries, withSchema } from './queries'
+import { mergeConfig } from '~/common/config'
 
 const log = logger('pgqueue:maintenance')
 
@@ -28,7 +29,7 @@ export class Maintenance {
 		private queries: Queries,
 		private config: MaintenanceConfig & typeof DEFAULT_CONFIG
 	) {
-		this.config = { ...DEFAULT_CONFIG, ...config }
+		this.config = config
 		this.db = db
 		this.queries = queries
 	}
@@ -37,7 +38,7 @@ export class Maintenance {
 		connectionSpec: DBConnectionSpec,
 		config?: MaintenanceConfig
 	): Maintenance {
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const db = DB.create(connectionSpec)
 		const queries = withSchema(mergedConfig.schema)
 		return new Maintenance(db, queries, mergedConfig)

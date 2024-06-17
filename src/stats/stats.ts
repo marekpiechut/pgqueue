@@ -13,6 +13,7 @@ import { DEFAULT_SCHEMA } from '~/db'
 import { QueueItemState } from '~/queues/models'
 import { BasicStats, StatsHistogram } from './models'
 import { Queries, withSchema } from './queries'
+import { mergeConfig } from '~/common/config'
 
 const log = logger('pgqueue:stats')
 
@@ -34,7 +35,7 @@ export class Stats {
 
 	static create(connectionSpec: DBConnectionSpec, config?: Config): Stats {
 		const connection = DB.create(connectionSpec)
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const queries = withSchema(mergedConfig.schema)
 		return new Stats(connection, queries, mergedConfig)
 	}

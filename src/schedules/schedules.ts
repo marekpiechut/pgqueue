@@ -12,6 +12,7 @@ import {
 	updateSchedule,
 } from './models'
 import { Queries, withSchema } from './queries'
+import { mergeConfig } from '~/common/config'
 
 const log = logger('pgqueue:schedules')
 
@@ -53,7 +54,7 @@ export class Schedules implements ScheduleManager, TenantScheduleManager {
 		config?: SchedulesConfig
 	): ScheduleManager {
 		const connection = DB.create(connectionSpec)
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const queries = withSchema(mergedConfig.schema)
 
 		return new Schedules(connection, queries, mergedConfig)

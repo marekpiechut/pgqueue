@@ -5,6 +5,7 @@ import { DB, DBConnectionSpec } from '~/common/sql'
 import { DEFAULT_SCHEMA } from '~/db'
 import { AnyQueueItem, queueForWork } from './models'
 import { Queries, withSchema } from './queries'
+import { mergeConfig } from '~/common/config'
 
 const log = logger('pgqueue:scheduler')
 
@@ -28,7 +29,7 @@ export class Scheduler {
 		private queries: Queries,
 		private config: Config & typeof DEFAULT_CONFIG
 	) {
-		this.config = { ...DEFAULT_CONFIG, ...config }
+		this.config = mergeConfig(DEFAULT_CONFIG, config)
 		this.db = db
 		this.queries = queries
 	}
@@ -37,7 +38,7 @@ export class Scheduler {
 		connectionSpec: DBConnectionSpec,
 		config: Config
 	): Scheduler {
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const db = DB.create(connectionSpec)
 		const queries = withSchema(mergedConfig.schema)
 		return new Scheduler(db, queries, mergedConfig)
@@ -83,6 +84,7 @@ export class Scheduler {
 					shuffled.map(i => (i as AnyQueueItem).id)
 				)
 			)
+
 			return items.length >= batchSize
 		})
 	}).bind(this)

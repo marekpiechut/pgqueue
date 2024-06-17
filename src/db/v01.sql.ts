@@ -58,7 +58,7 @@ const apply = (schema: string): Evolution => ({
 			PRIMARY KEY(id),
 			UNIQUE(tenant_id, queue, key)
 		);`,
-		`CREATE INDEX QUEUE_RUN_AFTER_CREATED ON ${schema}.QUEUE (run_after, created);`,
+		`CREATE INDEX QUEUE_STATE_RUN_AFTER_CREATED ON ${schema}.QUEUE (state, run_after, created);`,
 
 		/**
 		 * --- QUEUE CONFIG ---
@@ -188,7 +188,7 @@ const apply = (schema: string): Evolution => ({
 		`DROP TABLE IF EXISTS ${schema}.QUEUE_HISTORY;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE;`,
 		`DROP TABLE IF EXISTS ${schema}.SCHEDULES;`,
-		`DROP TABLE IF EXISTS ${schema}.WORK;`,
+		`DROP TABLE IF EXISTS ${schema}.WORKER_METADATA;`,
 	],
 })
 

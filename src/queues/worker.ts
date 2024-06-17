@@ -21,6 +21,7 @@ import {
 } from './models'
 import { Queries, withSchema } from './queries'
 import { AnyObject } from '~/common/models'
+import { mergeConfig } from '~/common/config'
 
 const log = logger('pgqueue:worker')
 
@@ -55,7 +56,7 @@ export class Worker {
 		handler: WorkerHandler
 	): Worker {
 		const connection = DB.create(db)
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const queries = withSchema(mergedConfig.schema)
 		return new Worker(connection, queries, mergedConfig, handler)
 	}
@@ -85,6 +86,7 @@ export class Worker {
 	private poll = (async (): Promise<RerunImmediately> => {
 		const { db, queries } = this
 		const { nodeId, batchSize, lockTimeout } = this.config
+		log.debug('Polling for work')
 		const items = await db.execute(
 			queries.pollWorkQueue(nodeId, batchSize, lockTimeout)
 		)

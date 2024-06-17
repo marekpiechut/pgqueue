@@ -6,6 +6,7 @@ import { DEFAULT_SCHEMA } from '~/db'
 import Queues from '~/queues'
 import { executeSchedule, executedSuccessfully } from './models'
 import { Queries, withSchema } from './queries'
+import { mergeConfig } from '~/common/config'
 
 const log = logger('pgqueue:schedules:runner')
 
@@ -17,7 +18,7 @@ export type ScheduleRunnerConfig = {
 const DEFAULT_CONFIG = {
 	schema: DEFAULT_SCHEMA,
 	batchSize: 100,
-	pollInterval: 10000,
+	pollInterval: 1000,
 }
 
 export class ScheduleRunner {
@@ -35,21 +36,21 @@ export class ScheduleRunner {
 		config: ScheduleRunnerConfig
 	): ScheduleRunner {
 		const connection = DB.create(connectionSpec)
-		const mergedConfig = { ...DEFAULT_CONFIG, ...config }
+		const mergedConfig = mergeConfig(DEFAULT_CONFIG, config)
 		const queries = withSchema(mergedConfig.schema)
 		const queues = Queues.create(connectionSpec, mergedConfig)
 		return new ScheduleRunner(connection, queries, mergedConfig, queues)
 	}
 
 	async start(): Promise<void> {
-		log.info('Starting scheduler', this.config)
+		log.info('Starting scheduled runner', this.config)
 		this.abort = new AbortController()
 		pollingLoop(this.run, this.config.pollInterval, this.abort.signal)
 	}
 
 	async stop(): Promise<void> {
 		if (!this.abort) return
-		log.info('Shutting down scheduler', this.config)
+		log.info('Shutting down scheduled runner', this.config)
 		this.abort.abort()
 		this.abort = undefined
 	}

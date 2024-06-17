@@ -17,9 +17,9 @@ export const pollingLoop = (
 	const loop = async (): Promise<void> => {
 		let run = true
 		try {
-			while (run && !abort.aborted) {
+			do {
 				run = await fn()
-			}
+			} while (run && !abort.aborted)
 		} finally {
 			timeout = setTimeout(loop, interval)
 		}
