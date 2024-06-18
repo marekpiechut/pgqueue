@@ -184,11 +184,11 @@ const apply = (schema: string): Evolution => ({
 	],
 	downs: [
 		`DROP TABLE IF EXISTS ${schema}.WORK_QUEUE;`,
+		`DROP TABLE IF EXISTS ${schema}.WORKER_METADATA;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE_CONFIG;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE_HISTORY;`,
 		`DROP TABLE IF EXISTS ${schema}.QUEUE;`,
 		`DROP TABLE IF EXISTS ${schema}.SCHEDULES;`,
-		`DROP TABLE IF EXISTS ${schema}.WORKER_METADATA;`,
 	],
 })
 
