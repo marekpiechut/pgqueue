@@ -25,10 +25,7 @@ const apply = (schema: string): Evolution => ({
 
 		`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT ALL ON TABLES TO QUEUE_USER;`,
 		`ALTER DEFAULT PRIVILEGES IN SCHEMA ${schema} GRANT ALL ON TABLES TO QUEUE_WORKER;`,
-		//TODO: how to handle this???
-		`GRANT QUEUE_USER TO lq`,
-		`GRANT QUEUE_WORKER TO lqworker`,
-		//END
+
 		/**
 		 * --- JOB QUEUE ---
 		 */

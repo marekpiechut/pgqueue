@@ -60,6 +60,7 @@ export class Scheduler {
 	//TODO: switch to batch size 1 and fail item that could not be scheduled
 	//if there was an error with regular scheduling
 	private schedule = (async (): Promise<RerunImmediately> => {
+		log.debug('Polling for work')
 		const { db, queries } = this
 		const { batchSize } = this.config
 		return db.transactional(async withTx => {
