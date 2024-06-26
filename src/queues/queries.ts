@@ -330,7 +330,8 @@ const rowToItem = <T>(row: QueueItemRow): QueueItem<T> => {
 		updated: row.updated,
 		started: row.started,
 		state: row.state as QueueItemState,
-		delay: row.delay,
+		//Don't need full 64bit precision, just parse as int
+		delay: row.delay ? parseInt(row.delay, 10) : undefined,
 		payload: row.payload,
 		payloadType: row.payload_type,
 		target: row.target as T,
@@ -361,7 +362,8 @@ const rowToHistory = <T, R>(row: QueueHistoryRow): QueueHistory<T, R> => ({
 	created: row.created,
 	scheduled: row.scheduled,
 	state: row.state as QueueHistoryState,
-	delay: row.delay,
+	//Don't need full 64bit precision, just parse as int
+	delay: row.delay ? parseInt(row.delay, 10) : undefined,
 	tries: row.tries,
 	payload: row.payload,
 	payloadType: row.payload_type,

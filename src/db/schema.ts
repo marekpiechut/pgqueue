@@ -20,7 +20,7 @@ export type QueueItemRow = {
 	tries: number
 	queue: string
 	state: string
-	delay?: number
+	delay?: string
 	run_after: Date
 	payload?: Buffer
 	payload_type?: string
@@ -54,7 +54,7 @@ export type QueueHistoryRow = {
 	scheduled: Date
 	started: Date
 	state: string
-	delay?: number
+	delay?: string
 	tries: number
 	payload?: Buffer
 	payload_type?: string
