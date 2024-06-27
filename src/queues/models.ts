@@ -116,7 +116,7 @@ export const itemRunFailed = <T, R>(
 
 export const itemCompleted = <T, R>(
 	item: QueueItem<T>,
-	result: WorkResult<R>
+	result?: WorkResult<R>
 ): QueueHistory<T, R> => ({
 	id: item.id,
 	queue: item.queue,
@@ -133,9 +133,9 @@ export const itemCompleted = <T, R>(
 	target: item.target,
 	payloadType: item.payloadType,
 	payload: item.payload,
-	resultType: result.payloadType,
-	result: result.payload,
-	workerData: result.data,
+	resultType: result?.payloadType,
+	result: result?.payload,
+	workerData: result?.data,
 })
 
 export const itemFailed = <T, R>(

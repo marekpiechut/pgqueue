@@ -5,8 +5,6 @@ import { RetryPolicy, nextRunDelay } from './retry'
 
 const log = logger.logger('core:psql')
 
-export type DBConnectionSpec = DBConnection | pg.Pool | string
-
 const DEFAULT_RETRY = {
 	type: 'exponential',
 	delay: 200,

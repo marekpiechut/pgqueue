@@ -39,7 +39,9 @@ const DEFAULT_CONFIG = {
 }
 
 const startedWorkerNodes: string[] = []
-export type WorkerHandler = (item: AnyQueueItem) => Promise<AnyWorkResult>
+export type WorkerHandler = (
+	item: AnyQueueItem
+) => Promise<AnyWorkResult | undefined>
 export class Worker {
 	private abort: AbortController | undefined
 
@@ -130,7 +132,7 @@ export class Worker {
 
 	async completed<T, R>(
 		item: QueueItem<T>,
-		result: WorkResult<R>
+		result?: WorkResult<R>
 	): Promise<void> {
 		const { db, queries } = this
 		await db.transactional(async withTx => {

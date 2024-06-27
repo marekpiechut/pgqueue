@@ -14,7 +14,7 @@
 	"files": [
 		"lib"
 	],
-	"private": true,
+	"private": false,
 	"devDependencies": {
 		"@types/chai": "^4.3.16",
 		"@types/jest": "^29.5.12",

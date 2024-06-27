@@ -30,7 +30,6 @@ export const withSchema = (schema: string) =>
 		)`
 			DELETE FROM {{schema}}.schedules WHERE key = ${id} RETURNING *
 		`,
-		//TODO: skip already scheduled!!!
 		fetchAndLockRunnable: (batchSize: number) => sql(schema, rowToSchedule)`
 			SELECT * FROM {{schema}}.schedules
 			WHERE next_run IS NOT NULL AND next_run <= now() AND paused IS NOT TRUE

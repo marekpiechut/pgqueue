@@ -6,6 +6,7 @@ import { applyEvolutions } from './db/schema'
 import * as queues from './queues'
 import * as schedules from './schedules'
 import * as stats from './stats'
+import { DBConnectionSpec } from './common/sql'
 
 export {
 	MimeType,
@@ -62,10 +63,9 @@ export default {
 		}
 	},
 	quickstart: async (
-		pool: pg.Pool,
-		config: { schema: string }
+		pool: DBConnectionSpec,
+		config?: { schema: string }
 	): Promise<Quickstart> => {
-		validateConfig(config)
 		const db = sql.DB.create(pool)
 
 		// const broadcaster = broadcast.Broadcaster.create(db)
@@ -91,10 +91,4 @@ export default {
 			},
 		}
 	},
-}
-
-const validateConfig = (config: Config): void => {
-	if (!config.schema) {
-		throw new Error('schema is required')
-	}
 }
