@@ -39,7 +39,6 @@ export default {
 		clientSpec: pg.ClientBase | string,
 		config: {
 			schema: string
-			allowDown?: boolean
 			logger?: logger.LoggerDelegate
 		}
 	): Promise<void> => {
@@ -55,7 +54,11 @@ export default {
 			adminClient = clientSpec
 		}
 		try {
-			await applyEvolutions(adminClient, config)
+			await applyEvolutions(adminClient, {
+				schema: config.schema,
+				allowDown: false,
+				ignoreDown: true,
+			})
 		} finally {
 			if (typeof clientSpec === 'string') {
 				await (adminClient as pg.Client).end()

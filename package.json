@@ -1,6 +1,7 @@
 {
 	"name": "@dayone-labs/pgqueue",
-	"version": "0.1.1",
+	"version": "0.1.2",
+	"license": "MIT",
 	"type": "module",
 	"main": "lib/index.js",
 	"types": "lib/index.d.ts",
@@ -36,7 +37,7 @@
 		"typescript-eslint": "^7.9.0"
 	},
 	"dependencies": {
-		"@dayone-labs/evolutions": "~0.2.0",
+		"@dayone-labs/evolutions": "~0.3.0",
 		"cron-parser": "^4.9.0",
 		"date-fns": "~3.6.0",
 		"lodash": "~4.17.21",
