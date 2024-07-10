@@ -54,7 +54,7 @@
 // 		client.on('notification', this.onEvent)
 
 // 		//ProcessID is not in types, but it's there
-// 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// 		// biome-ignore lint/suspicious/noExplicitAny: Expected any type
 // 		this.clientId = (client as any).processID
 // 		log.info('Client ID:', this.clientId)
 // 		await this.listen(...this.handlers.keys())

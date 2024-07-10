@@ -1,7 +1,7 @@
 import * as pg from 'pg'
 import { TenantId } from './psql'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: Expected any type
 type SqlArg = any
 export type QueryConfig<R, M = R, O = M[]> = {
 	name?: string

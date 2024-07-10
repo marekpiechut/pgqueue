@@ -12,6 +12,6 @@ export const mergeConfig = <
 			}
 		}
 		return acc
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		// biome-ignore lint/suspicious/noExplicitAny: Expected any type
 	}, {} as any)
 }

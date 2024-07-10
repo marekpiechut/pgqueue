@@ -172,12 +172,12 @@ export abstract class Repository {
 		return repo as this
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	// biome-ignore lint/suspicious/noExplicitAny: Expected any type
 	protected async execute<T extends QueryResultRow = any>(
 		query: string,
 		...args: unknown[]
 	): Promise<QueryResult<T>>
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	// biome-ignore lint/suspicious/noExplicitAny: Expected any type
 	protected async execute<T extends QueryResultRow = any>(
 		config: QueryConfig
 	): Promise<QueryResult<T>>
@@ -221,11 +221,10 @@ export abstract class Repository {
 
 export type SortOrder = 'ASC' | 'DESC'
 //Make sure we don't get an SQL injection when passing sort from API
-export const sanitySort: (
-	dir?: SortOrder | null | undefined
-) => SortOrder = dir => {
-	return dir?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
-}
+export const sanitySort: (dir?: SortOrder | null | undefined) => SortOrder =
+	dir => {
+		return dir?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC'
+	}
 
 export type QueryArg = unknown
 export const countArguments = (sql: string): number => {
