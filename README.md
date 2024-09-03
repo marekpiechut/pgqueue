@@ -7,6 +7,9 @@ A multi-tenant, scalable queue/schedule solution for Node/Bun based on PostgreSQ
 > serverless queues product: [LambdaQueue](https://lambdaqueue.com), but it
 > was not tested in other uses.
 
+This library is running on **Bun** in production and **Bun** is it's primary
+target runtime.
+
 ## Features
 
 This library provides a general queueing and scheduling mechanisms for NodeJS/Bun. It has support for:
