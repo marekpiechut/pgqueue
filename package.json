@@ -1,6 +1,6 @@
 {
 	"name": "@dayone-labs/pgqueue",
-	"version": "0.1.2",
+	"version": "0.1.4",
 	"license": "MIT",
 	"type": "module",
 	"main": "lib/index.js",
@@ -25,6 +25,7 @@
 		"@types/pg": "~8.11.6",
 		"@typescript-eslint/eslint-plugin": "^7.9.0",
 		"chai": "^5.1.1",
+		"concurrently": "^9.1.2",
 		"eslint": "^8.57.0",
 		"eslint-config-prettier": "^9.1.0",
 		"eslint-plugin-import": "^2.29.1",
@@ -36,7 +37,7 @@
 		"typescript-eslint": "^7.9.0"
 	},
 	"dependencies": {
-		"@dayone-labs/evolutions": "~0.3.0",
+		"@dayone-labs/evolutions": "~0.4.0",
 		"cron-parser": "^4.9.0",
 		"date-fns": "~3.6.0",
 		"lodash": "~4.17.21",
@@ -45,6 +46,7 @@
 	},
 	"scripts": {
 		"build": "tsc && tsc-alias",
+		"watch": "tsc && (concurrently \"tsc -w\" \"tsc-alias -w\")",
 		"clean": "shx rm -rf lib",
 		"typecheck": "tsc --noEmit",
 		"test": "tsx --test ./src/**/*.test.ts",

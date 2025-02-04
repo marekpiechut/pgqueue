@@ -48,10 +48,13 @@ export const withSchema = (schema: string) =>
 				UNION
 				SELECT DISTINCT tenant_id, queue FROM {{schema}}.queue_history
 			)
-			SELECT q.tenant_id, q.queue, COALESCE(c.paused, FALSE) as paused
+			SELECT
+				COALESCE(q.tenant_id, c.tenant_id) as tenant_id,
+				COALESCE(q.queue, c.queue) as queue,
+		 		COALESCE(c.paused, FALSE) as paused
 			FROM q FULL JOIN {{schema}}.queue_config c
 			ON q.tenant_id=c.tenant_id AND q.queue=c.queue
-			ORDER BY q.tenant_id, q.queue
+			ORDER BY 1, 2
 		`,
 		fetchQueue: (name: string) => sql(schema, rowToConfig, first)`
 			WITH q AS (
@@ -59,10 +62,13 @@ export const withSchema = (schema: string) =>
 				UNION
 				SELECT DISTINCT tenant_id, queue FROM {{schema}}.queue_history
 			)
-			SELECT q.tenant_id, q.queue, COALESCE(c.paused, FALSE) as paused
+			SELECT
+				COALESCE(q.tenant_id, c.tenant_id) as tenant_id,
+				COALESCE(q.queue, c.queue) as queue,
+		 		COALESCE(c.paused, FALSE) as paused
 			FROM q LEFT JOIN {{schema}}.queue_config c
 			ON q.tenant_id=c.tenant_id AND q.queue=c.queue
-			WHERE q.queue = ${name}
+			WHERE q.queue = ${name} OR c.queue = ${name}
 		`,
 		fetchAndLockDueItems: (limit: number = 100) => sql(schema, rowToItem)`
 			SELECT *
